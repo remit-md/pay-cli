@@ -1,0 +1,43 @@
+name: E2E Acceptance Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider_address:
+        description: "Provider wallet address for test payments"
+        required: false
+        default: ""
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  PAYSKILL_TESTNET_KEY: ${{ secrets.PAYSKILL_TESTNET_KEY }}
+  PAYSKILL_API_URL: ${{ secrets.PAYSKILL_TESTNET_URL || 'https://testnet.pay-skill.com/api/v1' }}
+  PAYSKILL_TESTNET_PROVIDER: ${{ github.event.inputs.provider_address }}
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: CLI E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build
+
+      - name: Initialize CLI
+        run: cargo run -- init
+
+      - name: Run E2E tests
+        run: cargo test --test e2e -- --ignored
