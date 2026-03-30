@@ -14,16 +14,57 @@ use crate::config::Config;
 pub struct Context {
     pub json: bool,
     pub config: Config,
+    pub http: reqwest::Client,
 }
 
 impl Context {
     pub fn new(json: bool, config: Config) -> Self {
-        Self { json, config }
+        Self {
+            json,
+            config,
+            http: reqwest::Client::new(),
+        }
     }
 
     /// Get the effective API URL.
     pub fn api_url(&self) -> &str {
         self.config.api_url()
+    }
+
+    /// Make a GET request to the API.
+    pub async fn get(&self, path: &str) -> Result<serde_json::Value> {
+        let url = format!("{}{}", self.api_url(), path);
+        let resp = self.http.get(&url).send().await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            bail!("API error ({status}): {body}");
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// Make a POST request to the API.
+    pub async fn post(&self, path: &str, body: &serde_json::Value) -> Result<serde_json::Value> {
+        let url = format!("{}{}", self.api_url(), path);
+        let resp = self.http.post(&url).json(body).send().await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            bail!("API error ({status}): {body}");
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// Make a DELETE request to the API.
+    pub async fn del(&self, path: &str) -> Result<()> {
+        let url = format!("{}{}", self.api_url(), path);
+        let resp = self.http.delete(&url).send().await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            bail!("API error ({status}): {body}");
+        }
+        Ok(())
     }
 }
 

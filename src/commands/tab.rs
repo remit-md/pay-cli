@@ -58,7 +58,6 @@ pub struct TabTopupArgs {
 
 pub async fn run(args: TabArgs, ctx: super::Context) -> Result<()> {
     super::require_init()?;
-    let _ = ctx.api_url();
 
     match args.action {
         TabAction::Open(a) => run_open(a, &ctx).await,
@@ -77,48 +76,68 @@ async fn run_open(args: TabOpenArgs, ctx: &super::Context) -> Result<()> {
     }
     let max_charge = super::parse_amount(&args.max_charge)?;
 
+    let body = serde_json::json!({
+        "provider": args.provider,
+        "amount": amount,
+        "max_charge_per_call": max_charge,
+    });
+    let resp = ctx.post("/tabs", &body).await?;
+
     if ctx.json {
-        error::print_json(&serde_json::json!({
-            "status": "not_implemented",
-            "provider": args.provider,
-            "amount": amount,
-            "max_charge_per_call": max_charge,
-        }));
+        error::print_json(&resp);
     } else {
+        let tab_id = resp["tab_id"].as_str().unwrap_or("unknown");
+        let fee = resp["activation_fee"].as_u64().unwrap_or(0);
         error::success(&format!(
-            "Tab open {} with {} (not yet connected)",
+            "Tab opened: {tab_id} ({}, fee: {})",
             super::format_amount(amount),
-            args.provider,
+            super::format_amount(fee),
         ));
     }
     Ok(())
 }
 
 async fn run_close(args: TabCloseArgs, ctx: &super::Context) -> Result<()> {
+    let resp = ctx
+        .post(
+            &format!("/tabs/{}/close", args.tab_id),
+            &serde_json::json!({}),
+        )
+        .await?;
+
     if ctx.json {
-        error::print_json(&serde_json::json!({
-            "status": "not_implemented",
-            "tab_id": args.tab_id,
-        }));
+        error::print_json(&resp);
     } else {
-        error::success(&format!("Tab close {} (not yet connected)", args.tab_id));
+        let charged = resp["total_charged"].as_u64().unwrap_or(0);
+        let count = resp["charge_count"].as_i64().unwrap_or(0);
+        error::success(&format!(
+            "Tab {} closed — {} charged over {} calls",
+            args.tab_id,
+            super::format_amount(charged),
+            count,
+        ));
     }
     Ok(())
 }
 
 async fn run_charge(args: TabChargeArgs, ctx: &super::Context) -> Result<()> {
     let amount = super::parse_amount(&args.amount)?;
+    let body = serde_json::json!({ "amount": amount });
+    let resp = ctx
+        .post(&format!("/tabs/{}/charge", args.tab_id), &body)
+        .await?;
+
     if ctx.json {
-        error::print_json(&serde_json::json!({
-            "status": "not_implemented",
-            "tab_id": args.tab_id,
-            "amount": amount,
-        }));
+        error::print_json(&resp);
     } else {
+        let status = resp["status"].as_str().unwrap_or("unknown");
+        let remaining = resp["balance_remaining"].as_u64().unwrap_or(0);
         error::success(&format!(
-            "Tab charge {} on {} (not yet connected)",
+            "Charge {} on {} [{}] — {} remaining",
             super::format_amount(amount),
             args.tab_id,
+            status,
+            super::format_amount(remaining),
         ));
     }
     Ok(())
@@ -126,30 +145,49 @@ async fn run_charge(args: TabChargeArgs, ctx: &super::Context) -> Result<()> {
 
 async fn run_topup(args: TabTopupArgs, ctx: &super::Context) -> Result<()> {
     let amount = super::parse_amount(&args.amount)?;
+    let body = serde_json::json!({ "amount": amount });
+    let resp = ctx
+        .post(&format!("/tabs/{}/topup", args.tab_id), &body)
+        .await?;
+
     if ctx.json {
-        error::print_json(&serde_json::json!({
-            "status": "not_implemented",
-            "tab_id": args.tab_id,
-            "amount": amount,
-        }));
+        error::print_json(&resp);
     } else {
+        let new_balance = resp["new_balance"].as_u64().unwrap_or(0);
         error::success(&format!(
-            "Tab topup {} on {} (not yet connected)",
+            "Topped up {} on {} — balance: {}",
             super::format_amount(amount),
             args.tab_id,
+            super::format_amount(new_balance),
         ));
     }
     Ok(())
 }
 
 async fn run_list(ctx: &super::Context) -> Result<()> {
+    let resp = ctx.get("/tabs").await?;
+
     if ctx.json {
-        error::print_json(&serde_json::json!({
-            "status": "not_implemented",
-            "tabs": [],
-        }));
+        error::print_json(&resp);
     } else {
-        error::success("No open tabs (not yet connected to server)");
+        let tabs = resp.as_array();
+        match tabs {
+            Some(tabs) if !tabs.is_empty() => {
+                for tab in tabs {
+                    let id = tab["id"].as_str().unwrap_or("?");
+                    let provider = tab["provider"].as_str().unwrap_or("?");
+                    let balance = tab["balance_remaining"].as_u64().unwrap_or(0);
+                    let status = tab["status"].as_str().unwrap_or("?");
+                    error::print_kv(&[
+                        ("Tab", id),
+                        ("Provider", provider),
+                        ("Balance", &super::format_amount(balance)),
+                        ("Status", status),
+                    ]);
+                }
+            }
+            _ => error::success("No open tabs"),
+        }
     }
     Ok(())
 }

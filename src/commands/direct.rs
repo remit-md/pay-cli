@@ -22,19 +22,25 @@ pub async fn run(args: DirectArgs, ctx: super::Context) -> Result<()> {
         anyhow::bail!("Minimum direct payment is $1.00");
     }
 
-    // Stub: will call POST /api/v1/direct when server exists
-    let _ = ctx.api_url();
+    let body = serde_json::json!({
+        "to": args.to,
+        "amount": amount,
+        "memo": args.memo.unwrap_or_default(),
+    });
+
+    let resp = ctx.post("/direct", &body).await?;
+
     if ctx.json {
-        error::print_json(&serde_json::json!({
-            "status": "not_implemented",
-            "to": args.to,
-            "amount": amount,
-        }));
+        error::print_json(&resp);
     } else {
+        let tx = resp["tx_hash"].as_str().unwrap_or("pending");
+        let status = resp["status"].as_str().unwrap_or("unknown");
         error::success(&format!(
-            "Direct payment {} to {} (not yet connected to server)",
+            "Sent {} to {} [{}] tx: {}",
             super::format_amount(amount),
             args.to,
+            status,
+            tx,
         ));
     }
     Ok(())

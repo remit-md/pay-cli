@@ -4,20 +4,30 @@ use clap::Args;
 use crate::error;
 
 #[derive(Args)]
-pub struct StatusArgs;
+pub struct StatusArgs {
+    /// Wallet address to check
+    #[arg(long)]
+    pub wallet: Option<String>,
+}
 
-pub async fn run(_args: StatusArgs, ctx: super::Context) -> Result<()> {
+pub async fn run(args: StatusArgs, ctx: super::Context) -> Result<()> {
     super::require_init()?;
 
-    // Stub: will call GET /api/v1/status when server exists
+    let wallet = args.wallet.unwrap_or_default();
+    let path = format!("/status?wallet={wallet}");
+    let resp = ctx.get(&path).await?;
+
     if ctx.json {
-        error::print_json(&serde_json::json!({
-            "status": "not_implemented",
-            "api_url": ctx.api_url(),
-        }));
+        error::print_json(&resp);
     } else {
-        error::success("Status (not yet connected to server)");
-        error::print_kv(&[("API", ctx.api_url())]);
+        let balance = resp["balance_usdc"].as_str().unwrap_or("unknown");
+        let tabs = resp["open_tabs"].as_i64().unwrap_or(0);
+        let locked = resp["total_locked"].as_u64().unwrap_or(0);
+        error::print_kv(&[
+            ("Balance", &format!("{balance} USDC")),
+            ("Open tabs", &tabs.to_string()),
+            ("Locked", &super::format_amount(locked)),
+        ]);
     }
     Ok(())
 }

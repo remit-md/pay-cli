@@ -76,18 +76,31 @@ async fn main() -> Result<()> {
         Commands::Sign(args) => commands::sign::run(args, ctx).await,
         Commands::Fund => {
             commands::require_init()?;
-            error::success("Opening funding page (not yet implemented)");
+            let resp = ctx.get("/fund-link").await?;
+            let url = resp["url"].as_str().unwrap_or("");
+            if ctx.json {
+                error::print_json(&resp);
+            } else if url.is_empty() {
+                error::success("Fund link not available");
+            } else {
+                error::success(&format!("Open to fund: {url}"));
+            }
             Ok(())
         }
         Commands::Withdraw(args) => {
             commands::require_init()?;
             commands::validate_address(&args.to)?;
             let amount = commands::parse_amount(&args.amount)?;
-            error::success(&format!(
-                "Withdraw {} to {} (not yet implemented)",
-                commands::format_amount(amount),
-                args.to,
-            ));
+            let path = format!("/withdraw-link?amount={amount}&to={}", args.to);
+            let resp = ctx.get(&path).await?;
+            let url = resp["url"].as_str().unwrap_or("");
+            if ctx.json {
+                error::print_json(&resp);
+            } else if url.is_empty() {
+                error::success("Withdraw link not available");
+            } else {
+                error::success(&format!("Open to withdraw: {url}"));
+            }
             Ok(())
         }
     }

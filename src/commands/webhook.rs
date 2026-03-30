@@ -33,40 +33,42 @@ pub struct WebhookDeleteArgs {
 
 pub async fn run(args: WebhookArgs, ctx: super::Context) -> Result<()> {
     super::require_init()?;
-    let _ = ctx.api_url();
 
     match args.action {
         WebhookAction::Register(a) => {
+            let body = serde_json::json!({ "url": a.url });
+            let resp = ctx.post("/webhooks", &body).await?;
             if ctx.json {
-                error::print_json(&serde_json::json!({
-                    "status": "not_implemented",
-                    "url": a.url,
-                }));
+                error::print_json(&resp);
             } else {
-                error::success(&format!(
-                    "Webhook registered: {} (not yet connected)",
-                    a.url
-                ));
+                let id = resp["id"].as_str().unwrap_or("?");
+                error::success(&format!("Webhook registered: {id} → {}", a.url));
             }
         }
         WebhookAction::List => {
+            let resp = ctx.get("/webhooks").await?;
             if ctx.json {
-                error::print_json(&serde_json::json!({
-                    "status": "not_implemented",
-                    "webhooks": [],
-                }));
+                error::print_json(&resp);
             } else {
-                error::success("No webhooks (not yet connected to server)");
+                let hooks = resp.as_array();
+                match hooks {
+                    Some(hooks) if !hooks.is_empty() => {
+                        for wh in hooks {
+                            let id = wh["id"].as_str().unwrap_or("?");
+                            let url = wh["url"].as_str().unwrap_or("?");
+                            error::print_kv(&[("ID", id), ("URL", url)]);
+                        }
+                    }
+                    _ => error::success("No webhooks registered"),
+                }
             }
         }
         WebhookAction::Delete(a) => {
+            ctx.del(&format!("/webhooks/{}", a.id)).await?;
             if ctx.json {
-                error::print_json(&serde_json::json!({
-                    "status": "not_implemented",
-                    "deleted": a.id,
-                }));
+                error::print_json(&serde_json::json!({ "deleted": a.id }));
             } else {
-                error::success(&format!("Webhook deleted: {} (not yet connected)", a.id));
+                error::success(&format!("Webhook deleted: {}", a.id));
             }
         }
     }
