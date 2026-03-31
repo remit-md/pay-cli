@@ -15,7 +15,10 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   PAYSKILL_TESTNET_KEY: ${{ secrets.PAYSKILL_TESTNET_KEY }}
-  PAYSKILL_API_URL: ${{ secrets.PAYSKILL_TESTNET_URL || 'https://testnet.pay-skill.com/api/v1' }}
+  PAYSKILL_SIGNER_KEY: ${{ secrets.PAYSKILL_TESTNET_KEY }}
+  PAYSKILL_API_URL: ${{ secrets.PAYSKILL_TESTNET_URL }}
+  PAYSKILL_CHAIN_ID: "84532"
+  PAYSKILL_ROUTER_ADDRESS: "0x3A6d9C4d5f0ef2E2f282A6BB0BDf6d4707ea3B95"
   PAYSKILL_TESTNET_PROVIDER: ${{ github.event.inputs.provider_address }}
 
 permissions:
@@ -38,6 +41,9 @@ jobs:
 
       - name: Initialize CLI
         run: cargo run -- init
+
+      - name: Mint testnet USDC
+        run: cargo run -- --json mint 100.00
 
       - name: Run E2E tests
         run: cargo test --test e2e -- --ignored
