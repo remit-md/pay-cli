@@ -129,7 +129,7 @@ fn key_path() -> PathBuf {
 fn derive_cipher(password: &str) -> Result<Aes256Gcm> {
     use sha3::{Digest, Sha3_256};
     let key = Sha3_256::digest(password.as_bytes());
-    Ok(Aes256Gcm::new_from_slice(&key).map_err(|e| anyhow::anyhow!("cipher init failed: {e}"))?)
+    Aes256Gcm::new_from_slice(&key).map_err(|e| anyhow::anyhow!("cipher init failed: {e}"))
 }
 
 #[cfg(test)]
