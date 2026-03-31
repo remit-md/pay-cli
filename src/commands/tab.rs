@@ -56,7 +56,7 @@ pub struct TabTopupArgs {
     pub amount: String,
 }
 
-pub async fn run(args: TabArgs, ctx: super::Context) -> Result<()> {
+pub async fn run(args: TabArgs, mut ctx: super::Context) -> Result<()> {
     super::require_init()?;
 
     match args.action {

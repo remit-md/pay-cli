@@ -7,7 +7,9 @@ pub mod tab;
 pub mod webhook;
 
 use anyhow::{bail, Result};
+use k256::ecdsa::SigningKey;
 
+use crate::auth;
 use crate::config::Config;
 
 /// Shared context passed to all command handlers.
@@ -15,6 +17,7 @@ pub struct Context {
     pub json: bool,
     pub config: Config,
     pub http: reqwest::Client,
+    signing_key: Option<SigningKey>,
 }
 
 impl Context {
@@ -23,7 +26,22 @@ impl Context {
             json,
             config,
             http: reqwest::Client::new(),
+            signing_key: None,
         }
+    }
+
+    /// Load the signing key (lazy, cached).
+    pub fn load_key(&mut self) -> Result<&SigningKey> {
+        if self.signing_key.is_none() {
+            self.signing_key = Some(crate::keystore::resolve_key()?);
+        }
+        Ok(self.signing_key.as_ref().expect("key just loaded"))
+    }
+
+    /// Get the wallet address (requires loaded key).
+    pub fn address(&mut self) -> Result<String> {
+        let key = self.load_key()?;
+        Ok(auth::derive_address(key))
     }
 
     /// Get the effective API URL.
@@ -31,10 +49,26 @@ impl Context {
         self.config.api_url()
     }
 
-    /// Make a GET request to the API.
-    pub async fn get(&self, path: &str) -> Result<serde_json::Value> {
+    /// Build auth headers for a request.
+    fn auth_headers(&mut self, method: &str, path: &str) -> Result<Vec<(String, String)>> {
+        let key = self.load_key()?;
+        let chain_id = self.config.chain_id();
+        let router = self.config.router_address();
+        if router.is_empty() {
+            bail!("router_address not set in config. Set ROUTER_ADDRESS or update ~/.pay/config.toml");
+        }
+        auth::build_auth_headers(key, method, path, chain_id, router)
+    }
+
+    /// Make an authenticated GET request to the API.
+    pub async fn get(&mut self, path: &str) -> Result<serde_json::Value> {
         let url = format!("{}{}", self.api_url(), path);
-        let resp = self.http.get(&url).send().await?;
+        let headers = self.auth_headers("GET", path)?;
+        let mut req = self.http.get(&url);
+        for (k, v) in &headers {
+            req = req.header(k, v);
+        }
+        let resp = req.send().await?;
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
@@ -43,10 +77,19 @@ impl Context {
         Ok(resp.json().await?)
     }
 
-    /// Make a POST request to the API.
-    pub async fn post(&self, path: &str, body: &serde_json::Value) -> Result<serde_json::Value> {
+    /// Make an authenticated POST request to the API.
+    pub async fn post(
+        &mut self,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
         let url = format!("{}{}", self.api_url(), path);
-        let resp = self.http.post(&url).json(body).send().await?;
+        let headers = self.auth_headers("POST", path)?;
+        let mut req = self.http.post(&url).json(body);
+        for (k, v) in &headers {
+            req = req.header(k, v);
+        }
+        let resp = req.send().await?;
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
@@ -55,10 +98,15 @@ impl Context {
         Ok(resp.json().await?)
     }
 
-    /// Make a DELETE request to the API.
-    pub async fn del(&self, path: &str) -> Result<()> {
+    /// Make an authenticated DELETE request to the API.
+    pub async fn del(&mut self, path: &str) -> Result<()> {
         let url = format!("{}{}", self.api_url(), path);
-        let resp = self.http.delete(&url).send().await?;
+        let headers = self.auth_headers("DELETE", path)?;
+        let mut req = self.http.delete(&url);
+        for (k, v) in &headers {
+            req = req.header(k, v);
+        }
+        let resp = req.send().await?;
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
@@ -96,7 +144,6 @@ pub fn parse_amount(s: &str) -> Result<u64> {
     if amount <= 0.0 {
         bail!("Amount must be positive");
     }
-    // Convert to micro-units, rounding to nearest integer
     let micro = (amount * 1_000_000.0).round() as u64;
     Ok(micro)
 }

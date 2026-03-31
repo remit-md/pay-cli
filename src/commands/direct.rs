@@ -14,7 +14,7 @@ pub struct DirectArgs {
     pub memo: Option<String>,
 }
 
-pub async fn run(args: DirectArgs, ctx: super::Context) -> Result<()> {
+pub async fn run(args: DirectArgs, mut ctx: super::Context) -> Result<()> {
     super::require_init()?;
     super::validate_address(&args.to)?;
     let amount = super::parse_amount(&args.amount)?;

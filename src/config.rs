@@ -11,9 +11,21 @@ const CONFIG_FILE: &str = "config.toml";
 pub struct Config {
     pub api_url: Option<String>,
     pub testnet: Option<bool>,
+    pub chain_id: Option<u64>,
+    pub router_address: Option<String>,
 }
 
 impl Config {
+    /// Get chain_id, defaulting to Base mainnet.
+    pub fn chain_id(&self) -> u64 {
+        self.chain_id.unwrap_or(8453)
+    }
+
+    /// Get router address. Returns empty string if not set.
+    pub fn router_address(&self) -> &str {
+        self.router_address.as_deref().unwrap_or("")
+    }
+
     /// Load config from ~/.pay/config.toml. Returns default if file doesn't exist.
     pub fn load() -> Result<Self> {
         let path = config_path();
@@ -74,7 +86,7 @@ mod tests {
     fn test_custom_api_url() {
         let config = Config {
             api_url: Some("http://localhost:3000".to_string()),
-            testnet: None,
+            ..Config::default()
         };
         assert_eq!(config.api_url(), "http://localhost:3000");
     }

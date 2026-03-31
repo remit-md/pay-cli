@@ -9,7 +9,7 @@ pub struct RequestArgs {
     pub url: String,
 }
 
-pub async fn run(args: RequestArgs, ctx: super::Context) -> Result<()> {
+pub async fn run(args: RequestArgs, mut ctx: super::Context) -> Result<()> {
     super::require_init()?;
 
     // Make the initial request

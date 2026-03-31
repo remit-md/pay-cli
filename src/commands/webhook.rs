@@ -31,7 +31,7 @@ pub struct WebhookDeleteArgs {
     pub id: String,
 }
 
-pub async fn run(args: WebhookArgs, ctx: super::Context) -> Result<()> {
+pub async fn run(args: WebhookArgs, mut ctx: super::Context) -> Result<()> {
     super::require_init()?;
 
     match args.action {

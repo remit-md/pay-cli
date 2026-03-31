@@ -1,7 +1,9 @@
+mod auth;
 mod commands;
 mod config;
 #[allow(dead_code)]
 mod error;
+mod keystore;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -41,6 +43,8 @@ enum Commands {
     Webhook(commands::webhook::WebhookArgs),
     /// Signer subprocess (stdin/stdout protocol for SDKs)
     Sign(commands::sign::SignArgs),
+    /// Show wallet address
+    Address,
     /// Open funding page
     Fund,
     /// Withdraw USDC
@@ -64,7 +68,7 @@ async fn main() -> Result<()> {
         config.api_url = Some(url.clone());
     }
 
-    let ctx = Context::new(cli.json, config);
+    let mut ctx = Context::new(cli.json, config);
 
     match cli.command {
         Commands::Init(args) => commands::init::run(args, ctx).await,
@@ -74,6 +78,16 @@ async fn main() -> Result<()> {
         Commands::Request(args) => commands::request::run(args, ctx).await,
         Commands::Webhook(args) => commands::webhook::run(args, ctx).await,
         Commands::Sign(args) => commands::sign::run(args, ctx).await,
+        Commands::Address => {
+            commands::require_init()?;
+            let addr = ctx.address()?;
+            if ctx.json {
+                error::print_json(&serde_json::json!({ "address": addr }));
+            } else {
+                println!("{addr}");
+            }
+            Ok(())
+        }
         Commands::Fund => {
             commands::require_init()?;
             let resp = ctx.get("/fund-link").await?;
