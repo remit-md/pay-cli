@@ -51,15 +51,15 @@ impl Context {
 
     /// Build auth headers for a request.
     fn auth_headers(&mut self, method: &str, path: &str) -> Result<Vec<(String, String)>> {
-        let key = self.load_key()?;
         let chain_id = self.config.chain_id();
-        let router = self.config.router_address();
+        let router = self.config.router_address().to_string();
         if router.is_empty() {
             bail!(
                 "router_address not set in config. Set ROUTER_ADDRESS or update ~/.pay/config.toml"
             );
         }
-        auth::build_auth_headers(key, method, path, chain_id, router)
+        let key = self.load_key()?;
+        auth::build_auth_headers(key, method, path, chain_id, &router)
     }
 
     /// Make an authenticated GET request to the API.
