@@ -13,6 +13,7 @@ use std::env;
 use std::sync::Once;
 
 static INIT: Once = Once::new();
+static LOCAL_INIT: Once = Once::new();
 
 // Testnet contract addresses (Base Sepolia).
 const TESTNET_CHAIN_ID: &str = "84532";
@@ -62,9 +63,23 @@ fn pay() -> Command {
     cmd
 }
 
-/// Build a `pay` command for local validation tests (no key needed).
+// Throwaway key for local validation tests (Anvil default #0, never hits the network).
+const LOCAL_KEY: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+
+/// Ensure `pay init` has been run with a local throwaway key (for validation tests).
+fn ensure_local_init() {
+    LOCAL_INIT.call_once(|| {
+        let mut cmd = Command::cargo_bin("pay").expect("binary not found");
+        cmd.env("PAYSKILL_SIGNER_KEY", LOCAL_KEY);
+        cmd.arg("init").assert().success();
+    });
+}
+
+/// Build a `pay` command for local validation tests (no testnet key needed).
 fn pay_local() -> Command {
+    ensure_local_init();
     let mut cmd = Command::cargo_bin("pay").expect("binary not found");
+    cmd.env("PAYSKILL_SIGNER_KEY", LOCAL_KEY);
     // Use a dummy API URL — validation tests never reach the network
     cmd.arg("--api-url").arg("http://localhost:9999");
     cmd.arg("--chain-id").arg(TESTNET_CHAIN_ID);
