@@ -1,6 +1,8 @@
 name: E2E Acceptance Tests
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       provider_address:
@@ -43,9 +45,7 @@ jobs:
         run: cargo run -- init
 
       - name: Mint testnet USDC
-        run: cargo run -- --json mint 100.00
+        run: cargo run -- --json mint 200.00
 
-      - name: Run E2E tests (auth acceptance)
-        run: cargo test --test e2e -- --ignored --skip direct_payment --skip tab_lifecycle
-        # Note: direct_payment and tab_lifecycle require EIP-2612 permit
-        # signing which is not yet implemented in the CLI.
+      - name: Run all E2E acceptance tests
+        run: cargo test --test e2e -- --ignored --test-threads=1

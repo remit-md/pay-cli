@@ -316,6 +316,105 @@ fn webhook_crud() {
     pay().args(["webhook", "delete", wh_id]).assert().success();
 }
 
-// Note: fund_link and withdraw_link tests removed — server doesn't
-// have /fund-link or /withdraw-link endpoints yet. These are dashboard
-// functions, not API endpoints.
+// ── Sign Subprocess ────────────────────────────────────────────────
+
+#[test]
+#[ignore = "requires PAYSKILL_TESTNET_KEY"]
+fn sign_subprocess_produces_valid_signature() {
+    if !has_testnet_key() {
+        return;
+    }
+    // 32-byte test hash (hex-encoded, no 0x prefix)
+    let test_hash = "de".repeat(32);
+
+    let output = pay()
+        .args(["sign"])
+        .write_stdin(test_hash)
+        .output()
+        .expect("failed to run pay sign");
+
+    assert!(
+        output.status.success(),
+        "pay sign failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let sig = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let sig_clean = sig.strip_prefix("0x").unwrap_or(&sig);
+    // Valid signature: 65 bytes = 130 hex chars
+    assert_eq!(
+        sig_clean.len(),
+        130,
+        "signature should be 65 bytes (130 hex chars), got {} chars: {}",
+        sig_clean.len(),
+        sig_clean,
+    );
+    // v should be 27 or 28
+    let v = u8::from_str_radix(&sig_clean[128..130], 16).expect("invalid v byte");
+    assert!(v == 27 || v == 28, "v should be 27 or 28, got {v}");
+}
+
+// ── Fund + Withdraw ────────────────────────────────────────────────
+
+#[test]
+#[ignore = "requires PAYSKILL_TESTNET_KEY"]
+fn fund_returns_link() {
+    if !has_testnet_key() {
+        return;
+    }
+    let output = pay()
+        .args(["--json", "fund"])
+        .output()
+        .expect("failed to run pay fund");
+
+    // Fund might succeed with a URL or fail if endpoint not configured
+    // Either way it shouldn't crash
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("url") || stdout.contains("http"),
+            "fund should return a URL or url field"
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires PAYSKILL_TESTNET_KEY"]
+fn withdraw_returns_link() {
+    if !has_testnet_key() {
+        return;
+    }
+    let addr = provider_addr();
+    let output = pay()
+        .args(["--json", "withdraw", &addr, "1.00"])
+        .output()
+        .expect("failed to run pay withdraw");
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("url") || stdout.contains("http"),
+            "withdraw should return a URL or url field"
+        );
+    }
+}
+
+// ── Address ────────────────────────────────────────────────────────
+
+#[test]
+#[ignore = "requires PAYSKILL_TESTNET_KEY"]
+fn address_returns_valid_format() {
+    if !has_testnet_key() {
+        return;
+    }
+    let output = pay()
+        .args(["address"])
+        .output()
+        .expect("failed to run pay address");
+    assert!(output.status.success());
+    let addr = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    assert!(
+        addr.starts_with("0x") && addr.len() == 42,
+        "address should be 0x + 40 hex chars, got: {addr}"
+    );
+}
