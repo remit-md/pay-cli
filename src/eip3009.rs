@@ -107,6 +107,7 @@ pub fn sign_transfer_authorization(
 /// Domain: USDC token contract ("USD Coin", version "2").
 /// Type: TransferWithAuthorization(address from, address to, uint256 value,
 ///       uint256 validAfter, uint256 validBefore, bytes32 nonce)
+#[allow(clippy::too_many_arguments)]
 fn compute_eip3009_hash(
     from: &str,
     to: &str,

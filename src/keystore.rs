@@ -5,6 +5,9 @@
 //!
 //! File format: JSON { "nonce": hex, "ciphertext": hex }
 
+// aes-gcm uses generic-array 0.x internally; suppress until upstream upgrades
+#![allow(deprecated)]
+
 use std::fs;
 use std::path::PathBuf;
 

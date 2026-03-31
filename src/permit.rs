@@ -104,6 +104,7 @@ pub async fn get_contracts(ctx: &mut commands::Context) -> Result<ContractAddres
 }
 
 pub struct ContractAddresses {
+    #[allow(dead_code)]
     pub router: String,
     pub tab: String,
     pub direct: String,
