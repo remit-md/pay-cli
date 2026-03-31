@@ -62,10 +62,30 @@ impl Context {
         auth::build_auth_headers(key, method, path, chain_id, &router)
     }
 
+    /// Resolve the full path for signing: /api/v1{path}.
+    /// The EIP-712 hash must use the exact path the server sees (no query string).
+    fn full_path(&self, path: &str) -> String {
+        // Strip query string — server uses uri.path() which excludes ?params
+        let path_only = path.split('?').next().unwrap_or(path);
+
+        // Extract the path portion from the API URL (e.g., "/api/v1" from "http://host/api/v1")
+        let api_url = self.api_url();
+        // Find the path after the host: skip "https://host" or "http://host:port"
+        if let Some(idx) = api_url.find("://") {
+            let after_scheme = &api_url[idx + 3..];
+            if let Some(slash_idx) = after_scheme.find('/') {
+                let base_path = after_scheme[slash_idx..].trim_end_matches('/');
+                return format!("{base_path}{path_only}");
+            }
+        }
+        format!("/api/v1{path_only}")
+    }
+
     /// Make an authenticated GET request to the API.
     pub async fn get(&mut self, path: &str) -> Result<serde_json::Value> {
         let url = format!("{}{}", self.api_url(), path);
-        let headers = self.auth_headers("GET", path)?;
+        let sign_path = self.full_path(path);
+        let headers = self.auth_headers("GET", &sign_path)?;
         let mut req = self.http.get(&url);
         for (k, v) in &headers {
             req = req.header(k, v);
@@ -86,7 +106,8 @@ impl Context {
         body: &serde_json::Value,
     ) -> Result<serde_json::Value> {
         let url = format!("{}{}", self.api_url(), path);
-        let headers = self.auth_headers("POST", path)?;
+        let sign_path = self.full_path(path);
+        let headers = self.auth_headers("POST", &sign_path)?;
         let mut req = self.http.post(&url).json(body);
         for (k, v) in &headers {
             req = req.header(k, v);
@@ -103,7 +124,8 @@ impl Context {
     /// Make an authenticated DELETE request to the API.
     pub async fn del(&mut self, path: &str) -> Result<()> {
         let url = format!("{}{}", self.api_url(), path);
-        let headers = self.auth_headers("DELETE", path)?;
+        let sign_path = self.full_path(path);
+        let headers = self.auth_headers("DELETE", &sign_path)?;
         let mut req = self.http.delete(&url);
         for (k, v) in &headers {
             req = req.header(k, v);
@@ -213,5 +235,39 @@ mod tests {
         assert_eq!(format_amount(1_500_000), "$1.50");
         assert_eq!(format_amount(5_000_000), "$5.00");
         assert_eq!(format_amount(100_000), "$0.10");
+    }
+
+    #[test]
+    fn test_full_path() {
+        let ctx = Context::new(
+            false,
+            crate::config::Config {
+                api_url: Some("http://localhost:3001/api/v1".to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(ctx.full_path("/direct"), "/api/v1/direct");
+        assert_eq!(ctx.full_path("/tabs"), "/api/v1/tabs");
+        assert_eq!(ctx.full_path("/mint"), "/api/v1/mint");
+        // Query strings must be stripped (server signs path only)
+        assert_eq!(ctx.full_path("/status?wallet=0xabc"), "/api/v1/status");
+    }
+
+    #[test]
+    fn test_full_path_https() {
+        let ctx = Context::new(
+            false,
+            crate::config::Config {
+                api_url: Some("https://pay-skill.com/api/v1".to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(ctx.full_path("/status"), "/api/v1/status");
+    }
+
+    #[test]
+    fn test_full_path_default() {
+        let ctx = Context::new(false, crate::config::Config::default());
+        assert_eq!(ctx.full_path("/direct"), "/api/v1/direct");
     }
 }

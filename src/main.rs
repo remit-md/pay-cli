@@ -23,6 +23,14 @@ struct Cli {
     #[arg(long, global = true, env = "PAYSKILL_API_URL")]
     api_url: Option<String>,
 
+    /// Override chain ID (default: 8453 for Base mainnet)
+    #[arg(long, global = true, env = "PAYSKILL_CHAIN_ID")]
+    chain_id: Option<u64>,
+
+    /// Override router contract address
+    #[arg(long, global = true, env = "PAYSKILL_ROUTER_ADDRESS")]
+    router_address: Option<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -49,6 +57,14 @@ enum Commands {
     Fund,
     /// Withdraw USDC
     Withdraw(WithdrawArgs),
+    /// Mint testnet USDC (testnet only)
+    Mint(MintArgs),
+}
+
+#[derive(clap::Args)]
+struct MintArgs {
+    /// Amount in USDC (e.g., "100.00")
+    amount: String,
 }
 
 #[derive(clap::Args)]
@@ -66,6 +82,12 @@ async fn main() -> Result<()> {
     let mut config = Config::load()?;
     if let Some(url) = &cli.api_url {
         config.api_url = Some(url.clone());
+    }
+    if let Some(id) = cli.chain_id {
+        config.chain_id = Some(id);
+    }
+    if let Some(addr) = &cli.router_address {
+        config.router_address = Some(addr.clone());
     }
 
     let mut ctx = Context::new(cli.json, config);
@@ -114,6 +136,23 @@ async fn main() -> Result<()> {
                 error::success("Withdraw link not available");
             } else {
                 error::success(&format!("Open to withdraw: {url}"));
+            }
+            Ok(())
+        }
+        Commands::Mint(args) => {
+            commands::require_init()?;
+            let amount = commands::parse_amount(&args.amount)?;
+            let resp = ctx
+                .post("/mint", &serde_json::json!({ "amount": amount }))
+                .await?;
+            if ctx.json {
+                error::print_json(&resp);
+            } else {
+                let tx = resp["tx_hash"].as_str().unwrap_or("unknown");
+                error::success(&format!(
+                    "Minted {} testnet USDC\n  Tx: {tx}",
+                    commands::format_amount(amount)
+                ));
             }
             Ok(())
         }
