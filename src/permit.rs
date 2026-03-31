@@ -63,10 +63,7 @@ pub async fn prepare_and_sign(
     let hash_clean = hash_hex.strip_prefix("0x").unwrap_or(hash_hex);
     let hash_bytes = hex::decode(hash_clean).context("invalid permit hash hex")?;
     if hash_bytes.len() != 32 {
-        bail!(
-            "permit hash must be 32 bytes, got {}",
-            hash_bytes.len()
-        );
+        bail!("permit hash must be 32 bytes, got {}", hash_bytes.len());
     }
     let mut hash = [0u8; 32];
     hash.copy_from_slice(&hash_bytes);
@@ -92,31 +89,17 @@ pub async fn prepare_and_sign(
 
 /// Fetch contract addresses from the server's /contracts endpoint.
 /// Returns (router, tab, direct, usdc) addresses.
-pub async fn get_contracts(
-    ctx: &mut commands::Context,
-) -> Result<ContractAddresses> {
+pub async fn get_contracts(ctx: &mut commands::Context) -> Result<ContractAddresses> {
     let resp = ctx
         .get("/contracts")
         .await
         .context("failed to fetch contract addresses")?;
 
     Ok(ContractAddresses {
-        router: resp["router"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string(),
-        tab: resp["tab"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string(),
-        direct: resp["direct"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string(),
-        usdc: resp["usdc"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string(),
+        router: resp["router"].as_str().unwrap_or_default().to_string(),
+        tab: resp["tab"].as_str().unwrap_or_default().to_string(),
+        direct: resp["direct"].as_str().unwrap_or_default().to_string(),
+        usdc: resp["usdc"].as_str().unwrap_or_default().to_string(),
     })
 }
 
