@@ -448,7 +448,11 @@ fn x402_request_handles_402_and_pays() {
 
     // Run `pay request` against our local server
     let output = pay()
-        .args(["--json", "request", &format!("http://127.0.0.1:{port}/content")])
+        .args([
+            "--json",
+            "request",
+            &format!("http://127.0.0.1:{port}/content"),
+        ])
         .timeout(std::time::Duration::from_secs(120))
         .output()
         .expect("failed to run pay request");
