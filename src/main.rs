@@ -142,12 +142,14 @@ async fn main() -> Result<()> {
         }
         Commands::Mint(args) => {
             commands::require_init()?;
-            let amount = commands::parse_amount(&args.amount)?;
+            // parse_amount returns micro-USDC, but /mint expects whole USDC
+            let micro = commands::parse_amount(&args.amount)?;
+            let whole = micro / 1_000_000;
             let wallet = ctx.address()?;
             let resp = ctx
                 .post(
                     "/mint",
-                    &serde_json::json!({ "wallet": wallet, "amount": amount }),
+                    &serde_json::json!({ "wallet": wallet, "amount": whole }),
                 )
                 .await?;
             if ctx.json {
@@ -156,7 +158,7 @@ async fn main() -> Result<()> {
                 let tx = resp["tx_hash"].as_str().unwrap_or("unknown");
                 error::success(&format!(
                     "Minted {} testnet USDC\n  Tx: {tx}",
-                    commands::format_amount(amount)
+                    commands::format_amount(micro)
                 ));
             }
             Ok(())
