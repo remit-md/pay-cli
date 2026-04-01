@@ -1,7 +1,7 @@
 //! EIP-2612 permit signing for USDC approvals.
 //!
 //! Flow:
-//! 1. GET /permit/prepare?amount=X&spender=Y — server returns EIP-712 hash, nonce, deadline
+//! 1. POST /permit/prepare { amount, spender } — server returns EIP-712 hash, nonce, deadline
 //! 2. CLI signs the hash with the agent's signing key
 //! 3. CLI includes (nonce, deadline, v, r, s) in the payment request body
 
@@ -42,9 +42,9 @@ pub async fn prepare_and_sign(
     spender: &str,
 ) -> Result<PermitSignature> {
     // 1. Ask server to prepare the permit hash
-    let path = format!("/permit/prepare?amount={amount}&spender={spender}");
+    let body = serde_json::json!({ "amount": amount, "spender": spender });
     let resp = ctx
-        .get(&path)
+        .post("/permit/prepare", &body)
         .await
         .context("failed to prepare permit — is the server running?")?;
 
