@@ -399,6 +399,78 @@ fn withdraw_returns_link() {
     }
 }
 
+// ── x402 Request ──────────────────────────────────────────────────
+
+#[test]
+#[ignore = "requires PAYSKILL_TESTNET_KEY"]
+fn x402_request_handles_402_and_pays() {
+    if !has_testnet_key() {
+        return;
+    }
+
+    // Start a mini HTTP server returning 402 on first request,
+    // then 200 when X-Payment-Tx header is present.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind failed");
+    let port = listener.local_addr().unwrap().port();
+
+    let handle = std::thread::spawn(move || {
+        // Accept up to 2 connections (first = 402, second = 200)
+        for _ in 0..2 {
+            if let Ok((mut stream, _)) = listener.accept() {
+                use std::io::{Read, Write};
+                let mut buf = [0u8; 4096];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]);
+
+                if req.contains("X-Payment-Tx") || req.contains("x-payment-tx") {
+                    let body = r#"{"content":"paid"}"#;
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = stream.write_all(resp.as_bytes());
+                } else {
+                    let body = format!(
+                        r#"{{"scheme":"exact","amount":1000000,"to":"{}","settlement":"direct"}}"#,
+                        provider_addr()
+                    );
+                    let resp = format!(
+                        "HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = stream.write_all(resp.as_bytes());
+                }
+            }
+        }
+    });
+
+    // Run `pay request` against our local server
+    let output = pay()
+        .args([
+            "--json",
+            "request",
+            &format!("http://127.0.0.1:{port}/content"),
+        ])
+        .timeout(std::time::Duration::from_secs(120))
+        .output()
+        .expect("failed to run pay request");
+
+    // Wait for server thread to finish
+    let _ = handle.join();
+
+    // The command should succeed (or at least produce output indicating payment was made)
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Success: either got 200 with content, or at least made the payment
+    assert!(
+        output.status.success() || stdout.contains("paid") || stdout.contains("tx_hash"),
+        "x402 request should succeed or show payment. stdout={stdout}, stderr={stderr}"
+    );
+}
+
 // ── Address ────────────────────────────────────────────────────────
 
 #[test]
