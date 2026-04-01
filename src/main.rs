@@ -114,7 +114,7 @@ async fn main() -> Result<()> {
         }
         Commands::Fund => {
             commands::require_init()?;
-            let resp = ctx.get("/fund-link").await?;
+            let resp = ctx.post("/links/fund", &serde_json::json!({})).await?;
             let url = resp["url"].as_str().unwrap_or("");
             if ctx.json {
                 error::print_json(&resp);
@@ -128,9 +128,8 @@ async fn main() -> Result<()> {
         Commands::Withdraw(args) => {
             commands::require_init()?;
             commands::validate_address(&args.to)?;
-            let amount = commands::parse_amount(&args.amount)?;
-            let path = format!("/withdraw-link?amount={amount}&to={}", args.to);
-            let resp = ctx.get(&path).await?;
+            let _amount = commands::parse_amount(&args.amount)?;
+            let resp = ctx.post("/links/withdraw", &serde_json::json!({})).await?;
             let url = resp["url"].as_str().unwrap_or("");
             if ctx.json {
                 error::print_json(&resp);
