@@ -231,6 +231,10 @@ fn tab_lifecycle() {
     let tab_id = open_json["tab_id"].as_str().expect("no tab_id in response");
     assert!(!tab_id.is_empty());
 
+    // Wait for on-chain state propagation (permit nonce must be updated
+    // before the next permit/prepare call, RPC nodes may lag).
+    std::thread::sleep(std::time::Duration::from_secs(5));
+
     // 2. List tabs — new tab should appear
     let list_output = pay()
         .args(["--json", "tab", "list"])
