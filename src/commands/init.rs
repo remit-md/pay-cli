@@ -123,10 +123,12 @@ async fn run_ows(args: InitArgs, ctx: super::Context) -> Result<()> {
     // Step 4: Create API key bound to wallet + policy
     let wallet_id = jstr(&wallet, "id");
     let key_result = ows::create_api_key(&wallet_id, &policy_id)?;
-    let token = jstr(&key_result, "token")
-        .is_empty()
-        .then(|| jstr(&key_result, "api_key"))
-        .unwrap_or_else(|| jstr(&key_result, "token"));
+    let token_field = jstr(&key_result, "token");
+    let token = if token_field.is_empty() {
+        jstr(&key_result, "api_key")
+    } else {
+        token_field
+    };
     error::success("API key created");
 
     // Step 5: Output
