@@ -4,6 +4,7 @@ pub mod key;
 pub mod ows_cmd;
 pub mod request;
 pub mod sign;
+pub mod signer_cmd;
 pub mod status;
 pub mod tab;
 pub mod webhook;
