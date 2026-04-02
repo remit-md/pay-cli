@@ -96,7 +96,12 @@ async fn run_list(ctx: Context) -> Result<()> {
             } else {
                 w.id.clone()
             };
-            table.add_row(vec![w.name.clone(), address, short_id, w.created_at.clone()]);
+            table.add_row(vec![
+                w.name.clone(),
+                address,
+                short_id,
+                w.created_at.clone(),
+            ]);
         }
         println!("{table}");
     }
@@ -229,9 +234,7 @@ async fn run_settings(args: WalletSettingsArgs, ctx: Context) -> Result<()> {
     } else {
         error::print_kv(&[(
             "Display Name",
-            args.display_name
-                .as_deref()
-                .unwrap_or("(not set)"),
+            args.display_name.as_deref().unwrap_or("(not set)"),
         )]);
     }
 
