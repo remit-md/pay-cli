@@ -32,6 +32,7 @@ hex = "0.4"
 getrandom = "0.3"
 scrypt = "0.11"
 zeroize = { version = "1", features = ["derive"] }
+rpassword = "7"
 hostname = "0.4"
 chrono = "0.4"
 tempfile = "3"
