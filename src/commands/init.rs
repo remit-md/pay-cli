@@ -1,3 +1,9 @@
+//! `pay init` — default AES-256-GCM signer setup.
+//!
+//! For alternative signer paths, see:
+//! - `pay ows init` — OWS (Open Wallet Standard) wallet
+//! - `pay key init` — plain private key (dev/testing)
+
 use anyhow::Result;
 use clap::Args;
 
