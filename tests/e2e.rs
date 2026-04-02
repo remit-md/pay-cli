@@ -685,14 +685,24 @@ fn ows_init_creates_wallet() {
         return;
     }
 
-    let wallet_name = format!("pay-test-{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis());
+    let wallet_name = format!(
+        "pay-test-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
 
     let output = Command::cargo_bin("pay")
         .expect("binary not found")
-        .args(["ows", "init", "--name", &wallet_name, "--chain", "base-sepolia"])
+        .args([
+            "ows",
+            "init",
+            "--name",
+            &wallet_name,
+            "--chain",
+            "base-sepolia",
+        ])
         .output()
         .expect("failed to run ows init");
 
