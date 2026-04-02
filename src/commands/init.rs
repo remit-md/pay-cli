@@ -78,7 +78,10 @@ pub async fn run(args: InitArgs, _ctx: super::Context) -> Result<()> {
         };
         meta.write_to_disk()?;
 
-        let config = Config::default();
+        let mut config = Config::default();
+        if let Err(e) = config.bootstrap_from_server().await {
+            eprintln!("  Warning: could not fetch config from server: {e}");
+        }
         config.save()?;
 
         error::success(&format!("Wallet initialized: {address}"));
@@ -90,7 +93,10 @@ pub async fn run(args: InitArgs, _ctx: super::Context) -> Result<()> {
         let pw = password::acquire_for_encrypt()?;
         let address = ks.generate("default", &pw)?;
 
-        let config = Config::default();
+        let mut config = Config::default();
+        if let Err(e) = config.bootstrap_from_server().await {
+            eprintln!("  Warning: could not fetch config from server: {e}");
+        }
         config.save()?;
 
         error::success(&format!("Wallet initialized: {address}"));

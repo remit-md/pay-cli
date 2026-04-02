@@ -60,7 +60,7 @@ pub struct SignerExportArgs {
 
 pub async fn run(action: SignerAction, _ctx: super::Context) -> Result<()> {
     match action {
-        SignerAction::Init(args) => run_init(args),
+        SignerAction::Init(args) => run_init(args).await,
         SignerAction::Import(args) => run_import(args),
         SignerAction::Export(args) => run_export(args),
     }
@@ -78,7 +78,7 @@ fn wallet_exists(name: &str) -> Result<bool> {
     Ok(false)
 }
 
-fn run_init(args: SignerInitArgs) -> Result<()> {
+async fn run_init(args: SignerInitArgs) -> Result<()> {
     if wallet_exists(&args.name)? {
         bail!(
             "Wallet '{}' already exists. Delete it first or use a different --name.",
@@ -109,7 +109,11 @@ fn run_init(args: SignerInitArgs) -> Result<()> {
         meta.write_to_disk()?;
 
         if !Config::is_initialized() {
-            Config::default().save()?;
+            let mut config = Config::default();
+            if let Err(e) = config.bootstrap_from_server().await {
+                eprintln!("  Warning: could not fetch config from server: {e}");
+            }
+            config.save()?;
         }
 
         eprintln!("Wallet '{}' created: {address}", args.name);
@@ -122,7 +126,11 @@ fn run_init(args: SignerInitArgs) -> Result<()> {
         let address = ks.generate(&args.name, &pw)?;
 
         if !Config::is_initialized() {
-            Config::default().save()?;
+            let mut config = Config::default();
+            if let Err(e) = config.bootstrap_from_server().await {
+                eprintln!("  Warning: could not fetch config from server: {e}");
+            }
+            config.save()?;
         }
 
         eprintln!("Wallet '{}' created: {address}", args.name);

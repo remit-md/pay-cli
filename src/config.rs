@@ -25,7 +25,7 @@ impl Config {
     pub fn router_address(&self) -> &str {
         self.router_address
             .as_deref()
-            .unwrap_or("0xE0Aa45e6937F3b9Fc0BEe457361885Cb9bfC067F")
+            .unwrap_or("0x24F26eCb1f46451994c59585817e87896749935D")
     }
 
     /// Load config from ~/.pay/config.toml. Returns default if file doesn't exist.
@@ -74,6 +74,33 @@ impl Config {
     /// Check if config file exists (i.e., `pay init` has been run).
     pub fn is_initialized() -> bool {
         config_path().exists()
+    }
+
+    /// Fetch contract addresses from the server's /contracts endpoint
+    /// and populate chain_id + router_address if not already set.
+    pub async fn bootstrap_from_server(&mut self) -> Result<()> {
+        let url = format!("{}/contracts", self.api_url());
+        let resp = reqwest::get(&url)
+            .await
+            .with_context(|| format!("Failed to reach {url}"))?;
+        if !resp.status().is_success() {
+            anyhow::bail!("Server returned {} from /contracts", resp.status());
+        }
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .with_context(|| "Failed to parse /contracts response")?;
+        if let Some(chain_id) = body["chain_id"].as_u64() {
+            if self.chain_id.is_none() {
+                self.chain_id = Some(chain_id);
+            }
+        }
+        if let Some(router) = body["router"].as_str() {
+            if self.router_address.is_none() {
+                self.router_address = Some(router.to_string());
+            }
+        }
+        Ok(())
     }
 }
 
