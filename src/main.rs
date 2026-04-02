@@ -5,6 +5,7 @@ mod eip3009;
 #[allow(dead_code)]
 mod error;
 mod keystore;
+#[allow(dead_code)]
 mod ows;
 mod permit;
 

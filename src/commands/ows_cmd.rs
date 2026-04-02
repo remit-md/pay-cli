@@ -1,355 +1,237 @@
-//! `pay ows` subcommand — Open Wallet Standard integration.
-//!
-//! All interaction goes through the `ows` CLI binary (subprocess).
-//! If OWS isn't installed, commands fail loud with install instructions.
+//! `pay ows` subcommand — OWS wallet management via `ows` CLI subprocess.
 
-use anyhow::Result;
-use clap::Subcommand;
+use anyhow::{bail, Result};
+use clap::{Args, Subcommand};
+use serde_json::Value;
 
-use crate::commands::Context;
 use crate::error;
 use crate::ows;
 
 #[derive(Subcommand)]
 pub enum OwsAction {
-    /// Create an OWS wallet with chain-lock policy and API key
-    Init(OwsInitArgs),
-    /// List all OWS wallets
-    List,
-    /// Generate a fund link for an OWS wallet
-    Fund(OwsFundArgs),
-    /// Set spending policy on an OWS wallet
+    /// Initialize an OWS wallet for Pay
+    Init(InitArgs),
+    /// List OWS wallets
+    List(ListArgs),
+    /// Fund an OWS wallet (opens browser)
+    Fund(FundArgs),
+    /// Set a spending policy on an OWS wallet
     SetPolicy(SetPolicyArgs),
 }
 
-#[derive(clap::Args)]
-pub struct OwsInitArgs {
+#[derive(Args)]
+pub struct InitArgs {
     /// Wallet name (default: pay-{hostname})
     #[arg(long)]
-    pub name: Option<String>,
+    name: Option<String>,
 
-    /// Chain: "base" (mainnet) or "base-sepolia" (testnet)
+    /// Chain (base or base-sepolia)
+    #[arg(long, default_value = "base")]
+    chain: String,
+
+    /// Install OWS CLI via npm if not found
     #[arg(long)]
-    pub chain: Option<String>,
+    install: bool,
 }
 
-#[derive(clap::Args)]
-pub struct OwsFundArgs {
-    /// Wallet name or ID (default: detect from OWS_WALLET_ID env)
+#[derive(Args)]
+pub struct ListArgs {
+    /// Output as JSON
     #[arg(long)]
-    pub wallet: Option<String>,
-
-    /// Pre-fill amount in USDC
-    #[arg(long)]
-    pub amount: Option<String>,
+    json: bool,
 }
 
-#[derive(clap::Args)]
+#[derive(Args)]
+pub struct FundArgs {
+    /// Wallet name or ID
+    #[arg(long, env = "OWS_WALLET_ID")]
+    wallet: String,
+}
+
+#[derive(Args)]
 pub struct SetPolicyArgs {
-    /// Chain: "base" or "base-sepolia"
-    #[arg(long)]
-    pub chain: Option<String>,
+    /// Wallet name or ID
+    #[arg(long, env = "OWS_WALLET_ID")]
+    wallet: Option<String>,
 
-    /// Per-transaction spending cap in USDC (e.g., 500)
+    /// Chain (base or base-sepolia)
+    #[arg(long, default_value = "base")]
+    chain: String,
+
+    /// Max USDC per transaction (e.g. "10.00")
     #[arg(long, allow_hyphen_values = true)]
-    pub max_tx: Option<f64>,
+    max_tx: String,
 
-    /// Daily spending cap in USDC (e.g., 5000)
+    /// Daily spending limit in USDC (e.g. "100.00")
     #[arg(long, allow_hyphen_values = true)]
-    pub daily_limit: Option<f64>,
-}
-
-pub async fn run(action: OwsAction, ctx: Context) -> Result<()> {
-    match action {
-        OwsAction::Init(args) => run_init(args, ctx).await,
-        OwsAction::List => run_list(ctx).await,
-        OwsAction::Fund(args) => run_fund(args, ctx).await,
-        OwsAction::SetPolicy(args) => run_set_policy(args, ctx).await,
-    }
+    daily_limit: String,
 }
 
 /// Helper to extract a string from a JSON value.
-fn jstr(v: &serde_json::Value, key: &str) -> String {
-    v.get(key)
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string()
+fn jstr(v: &Value, key: &str) -> String {
+    v[key].as_str().unwrap_or("").to_string()
 }
 
-// ── Init ─────────────────────────────────────────────────────────────
+pub async fn run(action: OwsAction, ctx: super::Context) -> Result<()> {
+    match action {
+        OwsAction::Init(args) => run_init(args).await,
+        OwsAction::List(args) => run_list(args),
+        OwsAction::Fund(args) => run_fund(args, ctx),
+        OwsAction::SetPolicy(args) => run_set_policy(args),
+    }
+}
 
-async fn run_init(args: OwsInitArgs, ctx: Context) -> Result<()> {
-    let chain = args.chain.unwrap_or_else(ows::detect_chain);
-    let wallet_name = args.name.unwrap_or_else(ows::default_wallet_name);
-
-    ows::chain_to_caip2(&chain)?;
-
-    // Step 1: Check if OWS is installed
+async fn run_init(args: InitArgs) -> Result<()> {
+    // Check / install OWS CLI
     if !ows::is_ows_available() {
-        println!("OWS not detected. Installing via npm...");
-        ows::install_ows_via_npm()?;
-
-        if !ows::is_ows_available() {
-            return Err(anyhow::anyhow!(
-                "OWS installation failed. Install manually:\n  \
-                 npm install -g @open-wallet-standard/core\n  \
-                 Or use `pay init` for Pay's default signer."
-            ));
-        }
-        error::success("OWS installed");
-    }
-
-    // Step 2: Create wallet
-    println!("Creating wallet '{wallet_name}'...");
-    let wallet = ows::create_wallet(&wallet_name)?;
-    let address = ows::wallet_evm_address(&wallet)
-        .ok_or_else(|| anyhow::anyhow!("wallet has no EVM account"))?;
-    error::success(&format!("Wallet created: {address}"));
-
-    // Step 3: Create chain-lock policy
-    let policy = ows::create_chain_policy(&chain)?;
-    let policy_id = jstr(&policy, "id");
-    error::success(&format!(
-        "Policy created: {policy_id} (chain lock: {chain})"
-    ));
-
-    // Step 4: Create API key bound to wallet + policy
-    let wallet_id = jstr(&wallet, "id");
-    let key_result = ows::create_api_key(&wallet_id, &policy_id)?;
-    let token_field = jstr(&key_result, "token");
-    let token = if token_field.is_empty() {
-        jstr(&key_result, "api_key")
-    } else {
-        token_field
-    };
-    error::success("API key created");
-
-    // Step 5: Output
-    if ctx.json {
-        error::print_json(&serde_json::json!({
-            "wallet_id": wallet_id,
-            "wallet_name": jstr(&wallet, "name"),
-            "address": address,
-            "chain": chain,
-            "policy_id": policy_id,
-            "api_key": token,
-            "mcp_config": serde_json::from_str::<serde_json::Value>(
-                &ows::mcp_config_json(&wallet_name, &chain)
-            ).unwrap_or_default(),
-        }));
-    } else {
-        println!();
-        error::print_kv(&[
-            ("Wallet", &wallet_name),
-            ("Address", &address),
-            ("Chain", &chain),
-            ("Policy", &policy_id),
-            ("Vault", &ows::vault_path_display()),
-        ]);
-        println!();
-        eprintln!("API Key (save this — shown once):");
-        eprintln!("  {token}");
-        println!();
-        eprintln!("MCP config (add to your claude_desktop_config.json):");
-        eprintln!("{}", ows::mcp_config_json(&wallet_name, &chain));
-        println!();
-        eprintln!("Set OWS_API_KEY={token} in your environment.");
-        eprintln!("Then your agent can use Pay via MCP with OWS-secured signing.");
-    }
-
-    Ok(())
-}
-
-// ── List ─────────────────────────────────────────────────────────────
-
-async fn run_list(ctx: Context) -> Result<()> {
-    let wallets = ows::list_wallets()?;
-
-    if wallets.is_empty() {
-        if ctx.json {
-            error::print_json(&serde_json::json!([]));
+        if args.install {
+            eprintln!("Installing OWS CLI via npm...");
+            ows::install_ows_via_npm()?;
+            error::success("OWS CLI installed");
         } else {
-            println!("No OWS wallets found. Run `pay ows init` to create one.");
+            bail!(
+                "ows CLI not found. Install with:\n  \
+                 npm install -g @open-wallet-standard/cli\n\n\
+                 Or run: pay ows init --install"
+            );
         }
+    }
+
+    let name = args.name.unwrap_or_else(ows::default_wallet_name);
+
+    // Check if wallet already exists
+    if let Ok(existing) = ows::get_wallet(&name) {
+        let addr = ows::wallet_evm_address(&existing).unwrap_or_default();
+        error::success(&format!("OWS wallet already exists: {name}"));
+        if !addr.is_empty() {
+            eprintln!("  EVM address: {addr}");
+        }
+        eprintln!();
+        eprintln!("  MCP config:");
+        eprintln!("  {}", ows::mcp_config_json(&name, &args.chain));
         return Ok(());
     }
 
-    if ctx.json {
-        let entries: Vec<serde_json::Value> = wallets
-            .iter()
-            .map(|w| {
-                let address = ows::wallet_evm_address(w).unwrap_or_default();
-                serde_json::json!({
-                    "id": jstr(w, "id"),
-                    "name": jstr(w, "name"),
-                    "address": address,
-                    "created_at": jstr(w, "createdAt"),
-                })
-            })
-            .collect();
-        error::print_json(&entries);
-    } else {
-        let mut table = comfy_table::Table::new();
-        table.set_header(vec!["Name", "Address", "ID", "Created"]);
-        for w in &wallets {
-            let address = ows::wallet_evm_address(w).unwrap_or_else(|| "\u{2014}".to_string());
-            let id = jstr(w, "id");
-            let short_id = if id.len() > 8 {
-                format!("{}...", &id[..8])
-            } else {
-                id
-            };
-            table.add_row(vec![
-                jstr(w, "name"),
-                address,
-                short_id,
-                jstr(w, "createdAt"),
-            ]);
-        }
-        println!("{table}");
+    // Validate chain
+    ows::chain_to_caip2(&args.chain)?;
+
+    // Create wallet
+    let wallet = ows::create_wallet(&name)?;
+    let addr = ows::wallet_evm_address(&wallet).unwrap_or_default();
+    let wallet_id = jstr(&wallet, "id");
+
+    error::success(&format!("OWS wallet created: {name}"));
+    if !addr.is_empty() {
+        eprintln!("  EVM address: {addr}");
+    }
+    eprintln!("  Wallet ID: {wallet_id}");
+    eprintln!("  Vault: {}", ows::vault_path_display());
+    eprintln!();
+    eprintln!("  MCP config:");
+    eprintln!("  {}", ows::mcp_config_json(&name, &args.chain));
+
+    Ok(())
+}
+
+fn run_list(args: ListArgs) -> Result<()> {
+    let wallets = ows::list_wallets()?;
+
+    if args.json {
+        let json = serde_json::to_string_pretty(&wallets)
+            .map_err(|e| anyhow::anyhow!("JSON serialization failed: {e}"))?;
+        println!("{json}");
+        return Ok(());
+    }
+
+    if wallets.is_empty() {
+        eprintln!("No OWS wallets found. Run `pay ows init` to create one.");
+        return Ok(());
+    }
+
+    for w in &wallets {
+        let name = jstr(w, "name");
+        let id = jstr(w, "id");
+        let addr = ows::wallet_evm_address(w).unwrap_or_else(|| "no EVM address".to_string());
+        println!("{name}  {addr}  ({id})");
     }
 
     Ok(())
 }
 
-// ── Fund ─────────────────────────────────────────────────────────────
+fn run_fund(args: FundArgs, ctx: super::Context) -> Result<()> {
+    let wallet = ows::get_wallet(&args.wallet)?;
+    let addr = ows::wallet_evm_address(&wallet)
+        .ok_or_else(|| anyhow::anyhow!("wallet has no EVM address"))?;
 
-async fn run_fund(args: OwsFundArgs, ctx: Context) -> Result<()> {
-    let wallet_name = args
-        .wallet
-        .or_else(|| std::env::var("OWS_WALLET_ID").ok())
-        .ok_or_else(|| {
-            anyhow::anyhow!("no wallet specified. Use --wallet or set OWS_WALLET_ID.")
-        })?;
+    let url = if ctx.config.is_testnet() {
+        format!("https://testnet.pay-skill.com/fund?wallet={addr}")
+    } else {
+        format!("https://pay-skill.com/fund?wallet={addr}")
+    };
 
+    error::success(&format!("Open to fund: {url}"));
+    let _ = open_url(&url);
+
+    Ok(())
+}
+
+fn run_set_policy(args: SetPolicyArgs) -> Result<()> {
+    // Validate chain
+    ows::chain_to_caip2(&args.chain)?;
+
+    // Validate amounts are positive
+    let max_tx: f64 = args
+        .max_tx
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid max-tx amount: {}", args.max_tx))?;
+    if max_tx <= 0.0 {
+        bail!("max-tx must be positive, got: {}", args.max_tx);
+    }
+
+    let daily: f64 = args
+        .daily_limit
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid daily-limit amount: {}", args.daily_limit))?;
+    if daily <= 0.0 {
+        bail!("daily-limit must be positive, got: {}", args.daily_limit);
+    }
+
+    let wallet_name = args.wallet.unwrap_or_else(ows::default_wallet_name);
     let wallet = ows::get_wallet(&wallet_name)?;
-    let address = ows::wallet_evm_address(&wallet)
-        .ok_or_else(|| anyhow::anyhow!("wallet has no EVM account"))?;
-    let name = jstr(&wallet, "name");
+    let wallet_id = jstr(&wallet, "id");
 
-    let base = if ctx.config.is_testnet() {
-        "https://testnet.pay-skill.com"
-    } else {
-        "https://pay-skill.com"
-    };
-
-    let mut url = format!("{base}/fund/{address}");
-    if let Some(ref amount) = args.amount {
-        url = format!("{url}?amount={amount}");
-    }
-
-    if ctx.json {
-        error::print_json(&serde_json::json!({
-            "url": url,
-            "wallet": name,
-            "address": address,
-        }));
-    } else {
-        error::print_kv(&[("Wallet", name.as_str()), ("Address", &address)]);
-        println!();
-        error::success(&format!("Fund link: {url}"));
-        println!();
-        println!("Open this link to add USDC to your wallet.");
-
-        if open_url(&url).is_err() {
-            println!("(Could not open browser automatically)");
-        }
-    }
-
-    Ok(())
-}
-
-// ── Set Policy ───────────────────────────────────────────────────────
-
-async fn run_set_policy(args: SetPolicyArgs, ctx: Context) -> Result<()> {
-    let chain = args.chain.unwrap_or_else(ows::detect_chain);
-    ows::chain_to_caip2(&chain)?;
-
-    let has_limits = args.max_tx.is_some() || args.daily_limit.is_some();
-
-    let policy = if has_limits {
-        if let Some(max_tx) = args.max_tx {
-            if max_tx <= 0.0 {
-                return Err(anyhow::anyhow!("--max-tx must be positive, got {max_tx}"));
-            }
-        }
-        if let Some(daily) = args.daily_limit {
-            if daily <= 0.0 {
-                return Err(anyhow::anyhow!(
-                    "--daily-limit must be positive, got {daily}"
-                ));
-            }
-        }
-        ows::create_spending_policy(&chain, args.max_tx, args.daily_limit)?
-    } else {
-        ows::create_chain_policy(&chain)?
-    };
-
+    let policy = ows::create_spending_policy(&args.chain, &args.max_tx, &args.daily_limit)?;
     let policy_id = jstr(&policy, "id");
-    let policy_name = jstr(&policy, "name");
 
-    if ctx.json {
-        error::print_json(&serde_json::json!({
-            "policy_id": policy_id,
-            "name": policy_name,
-            "chain": chain,
-            "max_tx_usdc": args.max_tx,
-            "daily_limit_usdc": args.daily_limit,
-        }));
-    } else {
-        error::success(&format!("Policy '{policy_id}' saved"));
-        error::print_kv(&[
-            ("Policy ID", policy_id.as_str()),
-            ("Name", policy_name.as_str()),
-            ("Chain", &chain),
-            (
-                "Max per-tx",
-                &args
-                    .max_tx
-                    .map(|v| format!("${v}"))
-                    .unwrap_or_else(|| "unlimited".to_string()),
-            ),
-            (
-                "Daily limit",
-                &args
-                    .daily_limit
-                    .map(|v| format!("${v}"))
-                    .unwrap_or_else(|| "unlimited".to_string()),
-            ),
-        ]);
+    let api_key = ows::create_api_key(&wallet_id, &policy_id)?;
+    let key_value = jstr(&api_key, "key");
 
-        if has_limits {
-            println!();
-            println!("Spending limits use the @pay-skill/ows-policy executable.");
-            println!("Install it: npm install -g @pay-skill/ows-policy");
-        }
+    error::success(&format!("Spending policy set on wallet: {wallet_name}"));
+    eprintln!("  Max per tx: ${}", args.max_tx);
+    eprintln!("  Daily limit: ${}", args.daily_limit);
+    eprintln!("  Chain: {}", args.chain);
+    if !key_value.is_empty() {
+        eprintln!("  API key: {key_value}");
     }
 
     Ok(())
 }
 
-/// Try to open a URL in the default browser.
+/// Open a URL in the default browser (cross-platform).
 fn open_url(url: &str) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(url).spawn()?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open").arg(url).spawn()?;
+    }
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
             .args(["/C", "start", "", url])
-            .spawn()
-            .map_err(|e| anyhow::anyhow!("failed to open browser: {e}"))?;
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(url)
-            .spawn()
-            .map_err(|e| anyhow::anyhow!("failed to open browser: {e}"))?;
-    }
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(url)
-            .spawn()
-            .map_err(|e| anyhow::anyhow!("failed to open browser: {e}"))?;
+            .spawn()?;
     }
     Ok(())
 }
