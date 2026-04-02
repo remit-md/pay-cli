@@ -18,22 +18,22 @@ use config::Config;
 
 /// pay — payment infrastructure for AI agents
 #[derive(Parser)]
-#[command(name = "pay", version, about)]
+#[command(name = "pay", version, about, after_help = "Output is JSON by default. Use --no-json for human-readable output.")]
 struct Cli {
-    /// Output as JSON instead of human-readable format
+    /// Disable JSON output (JSON is the default)
     #[arg(long, global = true)]
-    json: bool,
+    no_json: bool,
 
     /// Override API URL
-    #[arg(long, global = true, env = "PAYSKILL_API_URL")]
+    #[arg(long, global = true, env = "PAYSKILL_API_URL", hide = true)]
     api_url: Option<String>,
 
-    /// Override chain ID (default: 8453 for Base mainnet)
-    #[arg(long, global = true, env = "PAYSKILL_CHAIN_ID")]
+    /// Override chain ID
+    #[arg(long, global = true, env = "PAYSKILL_CHAIN_ID", hide = true)]
     chain_id: Option<u64>,
 
     /// Override router contract address
-    #[arg(long, global = true, env = "PAYSKILL_ROUTER_ADDRESS")]
+    #[arg(long, global = true, env = "PAYSKILL_ROUTER_ADDRESS", hide = true)]
     router_address: Option<String>,
 
     #[command(subcommand)]
@@ -110,7 +110,8 @@ async fn main() -> Result<()> {
         config.router_address = Some(addr.clone());
     }
 
-    let mut ctx = Context::new(cli.json, config);
+    let json = !cli.no_json;
+    let mut ctx = Context::new(json, config);
 
     match cli.command {
         Commands::Init(args) => commands::init::run(args, ctx).await,

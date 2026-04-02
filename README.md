@@ -82,8 +82,7 @@ pay withdraw 0xrecipient... 50.00     # Get withdrawal link
 
 | Flag | Env Var | Purpose |
 |------|---------|---------|
-| `--json` | — | Output JSON instead of human-readable format |
-| `--api-url` | `PAYSKILL_API_URL` | Override API URL (default: `https://pay-skill.com/api/v1`) |
+| `--no-json` | — | Output human-readable format instead of JSON (default: JSON) |
 
 ## Configuration
 
