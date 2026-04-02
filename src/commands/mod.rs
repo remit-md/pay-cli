@@ -4,6 +4,7 @@ pub mod request;
 pub mod sign;
 pub mod status;
 pub mod tab;
+pub mod wallet;
 pub mod webhook;
 
 use anyhow::{bail, Result};

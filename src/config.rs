@@ -59,6 +59,12 @@ impl Config {
             .unwrap_or("https://pay-skill.com/api/v1")
     }
 
+    pub fn is_testnet(&self) -> bool {
+        self.testnet.unwrap_or(false)
+            || self.chain_id == Some(84532)
+            || self.api_url.as_deref().is_some_and(|u| u.contains("testnet"))
+    }
+
     /// Check if config file exists (i.e., `pay init` has been run).
     pub fn is_initialized() -> bool {
         config_path().exists()

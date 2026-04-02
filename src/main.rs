@@ -5,6 +5,7 @@ mod eip3009;
 #[allow(dead_code)]
 mod error;
 mod keystore;
+mod ows;
 mod permit;
 
 use anyhow::Result;
@@ -53,6 +54,11 @@ enum Commands {
     Webhook(commands::webhook::WebhookArgs),
     /// Signer subprocess (stdin/stdout protocol for SDKs)
     Sign(commands::sign::SignArgs),
+    /// OWS wallet management (list, fund, set-policy, settings)
+    Wallet {
+        #[command(subcommand)]
+        action: commands::wallet::WalletAction,
+    },
     /// Show wallet address
     Address,
     /// Open funding page
@@ -102,6 +108,7 @@ async fn main() -> Result<()> {
         Commands::Request(args) => commands::request::run(args, ctx).await,
         Commands::Webhook(args) => commands::webhook::run(args, ctx).await,
         Commands::Sign(args) => commands::sign::run(args, ctx).await,
+        Commands::Wallet { action } => commands::wallet::run(action, ctx).await,
         Commands::Address => {
             commands::require_init()?;
             let addr = ctx.address()?;
