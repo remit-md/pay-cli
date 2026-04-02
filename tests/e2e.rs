@@ -173,15 +173,9 @@ fn mint_testnet_usdc() {
         eprintln!("mint rate-limited (expected if wallet already minted this hour), skipping");
         return;
     }
-    assert!(
-        output.status.success(),
-        "mint failed: {stderr}"
-    );
+    assert!(output.status.success(), "mint failed: {stderr}");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        stdout.contains("tx_hash"),
-        "mint should return tx_hash"
-    );
+    assert!(stdout.contains("tx_hash"), "mint should return tx_hash");
 }
 
 // ── Direct Payment ──────────────────────────────────────────────────

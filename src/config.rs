@@ -62,7 +62,10 @@ impl Config {
     pub fn is_testnet(&self) -> bool {
         self.testnet.unwrap_or(false)
             || self.chain_id == Some(84532)
-            || self.api_url.as_deref().is_some_and(|u| u.contains("testnet"))
+            || self
+                .api_url
+                .as_deref()
+                .is_some_and(|u| u.contains("testnet"))
     }
 
     /// Check if config file exists (i.e., `pay init` has been run).

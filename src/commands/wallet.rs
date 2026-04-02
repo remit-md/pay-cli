@@ -231,9 +231,7 @@ async fn run_settings(args: WalletSettingsArgs, ctx: Context) -> Result<()> {
         error::success("Wallet settings updated");
         error::print_kv(&[(
             "Display Name",
-            args.display_name
-                .as_deref()
-                .unwrap_or("(not set)"),
+            args.display_name.as_deref().unwrap_or("(not set)"),
         )]);
     }
 
