@@ -19,6 +19,8 @@ pub enum TabAction {
     Charge(TabChargeArgs),
     /// Add funds to an open tab
     Topup(TabTopupArgs),
+    /// Withdraw earned charges from a tab (provider-side)
+    Withdraw(TabWithdrawArgs),
     /// List open tabs
     List,
 }
@@ -56,6 +58,12 @@ pub struct TabTopupArgs {
     pub amount: String,
 }
 
+#[derive(Args)]
+pub struct TabWithdrawArgs {
+    /// Tab ID
+    pub tab_id: String,
+}
+
 pub async fn run(args: TabArgs, mut ctx: super::Context) -> Result<()> {
     super::require_init()?;
 
@@ -64,6 +72,7 @@ pub async fn run(args: TabArgs, mut ctx: super::Context) -> Result<()> {
         TabAction::Close(a) => run_close(a, &mut ctx).await,
         TabAction::Charge(a) => run_charge(a, &mut ctx).await,
         TabAction::Topup(a) => run_topup(a, &mut ctx).await,
+        TabAction::Withdraw(a) => run_withdraw(a, &mut ctx).await,
         TabAction::List => run_list(&mut ctx).await,
     }
 }
@@ -182,6 +191,28 @@ async fn run_topup(args: TabTopupArgs, ctx: &mut super::Context) -> Result<()> {
             super::format_amount(amount),
             args.tab_id,
             super::format_amount(new_balance),
+        ));
+    }
+    Ok(())
+}
+
+async fn run_withdraw(args: TabWithdrawArgs, ctx: &mut super::Context) -> Result<()> {
+    let resp = ctx
+        .post(
+            &format!("/tabs/{}/withdraw", args.tab_id),
+            &serde_json::json!({}),
+        )
+        .await?;
+
+    if ctx.json {
+        error::print_json(&resp);
+    } else {
+        let amount = resp["amount"].as_u64().unwrap_or(0);
+        let fee = resp["fee"].as_u64().unwrap_or(0);
+        error::success(&format!(
+            "Withdrawn {} (fee: {})",
+            super::format_amount(amount),
+            super::format_amount(fee),
         ));
     }
     Ok(())
