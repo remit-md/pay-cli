@@ -666,3 +666,75 @@ fn key_init_generates_keypair() {
     assert!(address.starts_with("0x") && address.len() == 42);
     assert!(key.starts_with("0x") && key.len() == 66);
 }
+
+// ── OWS happy path (requires OWS installed) ──────────────────────
+
+/// Returns true if the `ows` CLI is available on this machine.
+fn has_ows() -> bool {
+    std::process::Command::new("ows")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+#[test]
+#[ignore = "requires OWS CLI installed"]
+fn ows_init_creates_wallet() {
+    if !has_ows() {
+        eprintln!("skipping: ows CLI not available");
+        return;
+    }
+
+    let wallet_name = format!("pay-test-{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+
+    let output = Command::cargo_bin("pay")
+        .expect("binary not found")
+        .args(["--json", "ows", "init", "--name", &wallet_name, "--chain", "base-sepolia"])
+        .output()
+        .expect("failed to run ows init");
+
+    assert!(
+        output.status.success(),
+        "ows init should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("ows init should output valid JSON");
+
+    let address = json["address"].as_str().expect("should have address");
+    assert!(
+        address.starts_with("0x") && address.len() == 42,
+        "address should be valid: {address}"
+    );
+    assert_eq!(json["chain"].as_str(), Some("base-sepolia"));
+    assert!(
+        json["api_key"].as_str().is_some_and(|k| !k.is_empty()),
+        "should return non-empty api_key"
+    );
+}
+
+#[test]
+#[ignore = "requires OWS CLI installed"]
+fn ows_list_shows_wallets() {
+    if !has_ows() {
+        eprintln!("skipping: ows CLI not available");
+        return;
+    }
+
+    let output = Command::cargo_bin("pay")
+        .expect("binary not found")
+        .args(["--json", "ows", "list"])
+        .output()
+        .expect("failed to run ows list");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("ows list should output valid JSON");
+    assert!(parsed.is_array(), "ows list should return an array");
+}

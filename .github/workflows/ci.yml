@@ -42,3 +42,13 @@ jobs:
 
       - name: Test
         run: cargo test
+
+      - name: Install OWS CLI
+        run: |
+          curl -fsSL https://github.com/open-wallet-standard/core/releases/latest/download/ows-linux-x86_64 -o /usr/local/bin/ows
+          chmod +x /usr/local/bin/ows
+          ows --version
+
+      - name: OWS integration tests
+        run: cargo test --test e2e -- --ignored ows_
+        continue-on-error: true
