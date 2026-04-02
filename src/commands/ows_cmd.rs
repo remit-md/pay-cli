@@ -200,11 +200,12 @@ fn run_set_policy(args: SetPolicyArgs) -> Result<()> {
     let wallet = ows::get_wallet(&wallet_name)?;
     let wallet_id = jstr(&wallet, "id");
 
-    let policy = ows::create_spending_policy(&args.chain, &args.max_tx, &args.daily_limit)?;
+    let policy =
+        ows::create_spending_policy(&args.chain, Some(max_tx), Some(daily))?;
     let policy_id = jstr(&policy, "id");
 
-    let api_key = ows::create_api_key(&wallet_id, &policy_id)?;
-    let key_value = jstr(&api_key, "key");
+    let key_stdout = ows::create_api_key(&wallet_id, &policy_id)?;
+    let key_value = ows::parse_api_token(&key_stdout).unwrap_or_default();
 
     error::success(&format!("Spending policy set on wallet: {wallet_name}"));
     eprintln!("  Max per tx: ${}", args.max_tx);
