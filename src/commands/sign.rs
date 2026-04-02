@@ -35,15 +35,9 @@ pub async fn run(_args: SignArgs, _ctx: super::Context) -> Result<()> {
     Ok(())
 }
 
-/// Load the signing key from PAYSKILL_SIGNER_KEY environment variable.
+/// Load the signing key via the unified signer resolution chain.
 fn load_signing_key() -> Result<SigningKey> {
-    let key_hex = std::env::var("PAYSKILL_SIGNER_KEY")
-        .context("PAYSKILL_SIGNER_KEY not set. Set it to your hex-encoded private key.")?;
-
-    let clean = key_hex.strip_prefix("0x").unwrap_or(&key_hex);
-    let key_bytes = hex::decode(clean).context("Invalid hex in PAYSKILL_SIGNER_KEY")?;
-
-    SigningKey::from_slice(&key_bytes).context("Invalid private key in PAYSKILL_SIGNER_KEY")
+    crate::signer::resolve_key()
 }
 
 /// Sign a 32-byte hash and return the 65-byte Ethereum signature (r || s || v).

@@ -36,7 +36,7 @@ impl Context {
     /// Load the signing key (lazy, cached).
     pub fn load_key(&mut self) -> Result<&SigningKey> {
         if self.signing_key.is_none() {
-            self.signing_key = Some(crate::keystore::resolve_key()?);
+            self.signing_key = Some(crate::signer::resolve_key()?);
         }
         Ok(self.signing_key.as_ref().expect("key just loaded"))
     }
@@ -145,7 +145,13 @@ impl Context {
 
 /// Require that `pay init` has been run.
 pub fn require_init() -> Result<()> {
-    if !Config::is_initialized() {
+    // Check for any of: env var, .meta (keychain), .enc (encrypted file), config
+    let has_env = std::env::var("PAYSKILL_SIGNER_KEY").is_ok();
+    let has_meta = crate::signer::keyring::MetaFile::exists("default").unwrap_or(false);
+    let has_enc = crate::keystore::key_exists();
+    let has_config = Config::is_initialized();
+
+    if !has_env && !has_meta && !has_enc && !has_config {
         bail!("Wallet not initialized. Run `pay init` first.");
     }
     Ok(())

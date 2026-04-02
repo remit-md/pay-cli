@@ -39,7 +39,7 @@ pub async fn run(args: InitArgs, _ctx: super::Context) -> Result<()> {
         }
         if has_enc {
             // Try env var or old keystore to resolve
-            match crate::keystore::resolve_key() {
+            match crate::signer::resolve_key() {
                 Ok(key) => {
                     let addr = auth::derive_address(&key);
                     error::success(&format!("Already initialized. Wallet: {addr}"));
