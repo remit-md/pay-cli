@@ -8,6 +8,7 @@ mod keystore;
 #[allow(dead_code)]
 mod ows;
 mod permit;
+mod signer;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
