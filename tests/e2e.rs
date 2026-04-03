@@ -391,13 +391,13 @@ fn withdraw_returns_link() {
     );
 }
 
-// ── x402 Request ──────────────────────────────────────────────────
+// ── x402 Request (V2 wire format) ─────────────────────────────────
 
 #[test]
 #[ignore = "requires PAYSKILL_TESTNET_KEY"]
 fn x402_request_handles_402_and_pays() {
-    // Start a mini HTTP server returning 402 on first request,
-    // then 200 when X-Payment-Tx header is present.
+    // Start a mini HTTP server returning 402 with V2 PAYMENT-REQUIRED header
+    // on first request, then 200 when PAYMENT-SIGNATURE header is present.
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind failed");
     let port = listener.local_addr().unwrap().port();
 
@@ -410,7 +410,7 @@ fn x402_request_handles_402_and_pays() {
                 let n = stream.read(&mut buf).unwrap_or(0);
                 let req = String::from_utf8_lossy(&buf[..n]);
 
-                if req.contains("X-Payment") || req.contains("x-payment") {
+                if req.contains("PAYMENT-SIGNATURE") || req.contains("payment-signature") {
                     let body = r#"{"content":"paid"}"#;
                     let resp = format!(
                         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -419,13 +419,20 @@ fn x402_request_handles_402_and_pays() {
                     );
                     let _ = stream.write_all(resp.as_bytes());
                 } else {
-                    let body = format!(
-                        r#"{{"scheme":"exact","amount":1000000,"to":"{}","settlement":"direct"}}"#,
+                    // V2: requirements in body AND base64-encoded in PAYMENT-REQUIRED header
+                    let requirements = format!(
+                        r#"{{"scheme":"exact","amount":1000000,"to":"{}","settlement":"direct","facilitator":"https://testnet.pay-skill.com/x402","maxChargePerCall":1000000,"network":"eip155:84532"}}"#,
                         provider_addr()
                     );
+                    use base64::Engine;
+                    let req_b64 = base64::engine::general_purpose::STANDARD.encode(&requirements);
+                    let body = format!(
+                        r#"{{"error":"payment_required","message":"This resource requires payment","requirements":{requirements}}}"#,
+                    );
                     let resp = format!(
-                        "HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        "HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: {}\r\npayment-required: {}\r\nConnection: close\r\n\r\n{}",
                         body.len(),
+                        req_b64,
                         body
                     );
                     let _ = stream.write_all(resp.as_bytes());

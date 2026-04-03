@@ -28,8 +28,9 @@ pub async fn run(args: RequestArgs, mut ctx: super::Context) -> Result<()> {
         return Ok(());
     }
 
-    // 402 — parse payment requirements
-    let requirements: serde_json::Value = resp.json().await?;
+    // 402 — parse payment requirements (x402 V2)
+    // V2: check PAYMENT-REQUIRED header first (base64-encoded JSON)
+    let requirements = parse_402_requirements(resp).await?;
     let settlement = requirements["settlement"].as_str().unwrap_or("direct");
     let amount = requirements["amount"].as_u64().unwrap_or(0);
     let to = requirements["to"].as_str().unwrap_or("");
@@ -41,8 +42,8 @@ pub async fn run(args: RequestArgs, mut ctx: super::Context) -> Result<()> {
         ));
     }
 
-    // Pay via the appropriate settlement mode and build retry headers
-    let mut payment_headers: Vec<(String, String)> = Vec::new();
+    // Pay via the appropriate settlement mode and build PAYMENT-SIGNATURE
+    let payment_signature: serde_json::Value;
 
     if settlement == "tab" {
         // Tab settlement: find or open tab, charge it
@@ -80,8 +81,11 @@ pub async fn run(args: RequestArgs, mut ctx: super::Context) -> Result<()> {
             .await?;
         let charge_id = charge_resp["charge_id"].as_str().unwrap_or("").to_string();
 
-        payment_headers.push(("X-Payment-Tab".to_string(), tab_id));
-        payment_headers.push(("X-Payment-Charge".to_string(), charge_id));
+        payment_signature = serde_json::json!({
+            "settlement": "tab",
+            "tab_id": tab_id,
+            "charge_id": charge_id,
+        });
     } else {
         // Direct settlement — sign EIP-3009 TransferWithAuthorization
         let contracts = crate::permit::get_contracts(&mut ctx).await?;
@@ -91,17 +95,16 @@ pub async fn run(args: RequestArgs, mut ctx: super::Context) -> Result<()> {
         let auth =
             crate::eip3009::sign_transfer_authorization(key, to, amount, chain_id, &usdc_addr)?;
 
-        // Send payment proof as JSON in x402 header
-        let payment_json = auth.to_json().to_string();
-        payment_headers.push(("X-Payment".to_string(), payment_json));
+        payment_signature = auth.to_json();
     }
 
-    // Retry the original request with payment proof headers
-    let mut retry_req = ctx.http.get(&args.url);
-    for (k, v) in &payment_headers {
-        retry_req = retry_req.header(k, v);
-    }
-    let retry_resp = retry_req.send().await?;
+    // Retry the original request with V2 PAYMENT-SIGNATURE header
+    let retry_resp = ctx
+        .http
+        .get(&args.url)
+        .header("PAYMENT-SIGNATURE", payment_signature.to_string())
+        .send()
+        .await?;
 
     if ctx.json {
         let body: serde_json::Value = retry_resp.json().await.unwrap_or(serde_json::json!(null));
@@ -112,4 +115,39 @@ pub async fn run(args: RequestArgs, mut ctx: super::Context) -> Result<()> {
         error::success(&format!("[{status}] {body}"));
     }
     Ok(())
+}
+
+/// Parse x402 V2 payment requirements from a 402 response.
+///
+/// Checks PAYMENT-REQUIRED header first (base64-encoded JSON),
+/// falls back to response body.
+async fn parse_402_requirements(
+    resp: reqwest::Response,
+) -> Result<serde_json::Value> {
+    use base64::Engine;
+
+    // V2: check PAYMENT-REQUIRED header (base64-encoded JSON)
+    if let Some(pr_header) = resp.headers().get("payment-required") {
+        if let Ok(header_str) = pr_header.to_str() {
+            if let Ok(decoded_bytes) = base64::engine::general_purpose::STANDARD.decode(header_str) {
+                if let Ok(decoded_str) = String::from_utf8(decoded_bytes) {
+                    if let Ok(requirements) = serde_json::from_str::<serde_json::Value>(&decoded_str) {
+                        return Ok(requirements);
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: parse from response body
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| anyhow::anyhow!("invalid 402 response body: {e}"))?;
+
+    // Check if body has a "requirements" sub-object
+    if let Some(reqs) = body.get("requirements") {
+        return Ok(reqs.clone());
+    }
+    Ok(body)
 }
