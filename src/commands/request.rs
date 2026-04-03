@@ -126,18 +126,15 @@ async fn parse_402_requirements(resp: reqwest::Response) -> Result<serde_json::V
 
     // V2: check PAYMENT-REQUIRED header (base64-encoded JSON)
     if let Some(pr_header) = resp.headers().get("payment-required") {
-        if let Ok(header_str) = pr_header.to_str() {
-            if let Ok(decoded_bytes) =
-                base64::engine::general_purpose::STANDARD.decode(header_str)
-            {
-                if let Ok(decoded_str) = String::from_utf8(decoded_bytes) {
-                    if let Ok(requirements) =
-                        serde_json::from_str::<serde_json::Value>(&decoded_str)
-                    {
-                        return Ok(requirements);
-                    }
-                }
-            }
+        let parsed = pr_header
+            .to_str()
+            .ok()
+            .and_then(|s| base64::engine::general_purpose::STANDARD.decode(s).ok())
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
+
+        if let Some(requirements) = parsed {
+            return Ok(requirements);
         }
     }
 
