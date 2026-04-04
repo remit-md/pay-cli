@@ -38,6 +38,16 @@ hostname = "0.4"
 chrono = "0.4"
 tempfile = "3"
 
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+features = [
+    "Foundation",
+    "Security_Credentials_UI",
+    "Win32_Foundation",
+    "Win32_System_Console",
+    "Win32_System_WinRT",
+]
+
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"

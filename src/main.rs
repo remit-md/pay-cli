@@ -4,6 +4,7 @@ mod config;
 mod eip3009;
 #[allow(dead_code)]
 mod error;
+mod os_auth;
 #[allow(dead_code)]
 mod ows;
 mod permit;

@@ -483,6 +483,73 @@ fn address_returns_valid_format() {
     );
 }
 
+// ── Signer Backup / Restore / Export ─────────────────────────────
+
+#[test]
+fn signer_backup_subcommand_exists() {
+    Command::cargo_bin("pay")
+        .expect("binary not found")
+        .args(["signer", "backup", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--name"))
+        .stdout(predicate::str::contains("--output"));
+}
+
+#[test]
+fn signer_restore_subcommand_exists() {
+    Command::cargo_bin("pay")
+        .expect("binary not found")
+        .args(["signer", "restore", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("file"))
+        .stdout(predicate::str::contains("--name"));
+}
+
+#[test]
+fn signer_export_requires_interactive_terminal() {
+    // assert_cmd pipes stderr so it's not a terminal
+    ensure_local_init();
+    let mut cmd = Command::cargo_bin("pay").expect("binary not found");
+    cmd.env("PAYSKILL_SIGNER_KEY", LOCAL_KEY);
+    cmd.args(["signer", "export"]);
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("interactive terminal"));
+}
+
+#[test]
+fn signer_backup_requires_interactive_terminal() {
+    ensure_local_init();
+    let mut cmd = Command::cargo_bin("pay").expect("binary not found");
+    cmd.env("PAYSKILL_SIGNER_KEY", LOCAL_KEY);
+    cmd.args(["signer", "backup"]);
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("interactive terminal"));
+}
+
+#[test]
+fn signer_restore_rejects_missing_file() {
+    let mut cmd = Command::cargo_bin("pay").expect("binary not found");
+    cmd.env("PAYSKILL_SIGNER_KEY", LOCAL_KEY);
+    cmd.args(["signer", "restore", "/nonexistent/path.enc", "--name", "restore-test"]);
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("not found"));
+}
+
+#[test]
+fn signer_export_help_shows_clear_after() {
+    Command::cargo_bin("pay")
+        .expect("binary not found")
+        .args(["signer", "export", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("clear-after"));
+}
+
 // ── Signer Modes ────────────────────────────────────────────────────
 //
 // Three init paths: `pay init` (default signer), `pay ows init` (OWS),
