@@ -170,16 +170,61 @@ fn verify_password_fallback(reason: &str) -> Result<()> {
         return Ok(());
     }
 
-    // On other platforms (or if Linux `su` isn't available), accept the password
-    // as a friction gate — we can't verify it without PAM but the prompt itself
-    // prevents automated/accidental key extraction.
-    #[cfg(not(target_os = "linux"))]
+    // On Windows (Hello unavailable), verify via LogonUserW.
+    #[cfg(target_os = "windows")]
     {
-        // Windows Hello should have been used; this is a final fallback
-        // if Hello isn't configured. We trust that the user typing their
-        // password is a sufficient friction gate.
+        use windows::core::PCWSTR;
+        use windows::Win32::Foundation::CloseHandle;
+        use windows::Win32::Security::LogonUserW;
+        use windows::Win32::Security::LOGON32_LOGON_NETWORK;
+        use windows::Win32::Security::LOGON32_PROVIDER_DEFAULT;
+
+        let user_wide: Vec<u16> = username.encode_utf16().chain(std::iter::once(0)).collect();
+        // Empty domain = local machine
+        let domain_wide: Vec<u16> = ".".encode_utf16().chain(std::iter::once(0)).collect();
+        let pass_wide: Vec<u16> = password.encode_utf16().chain(std::iter::once(0)).collect();
+
+        let mut token = windows::Win32::Foundation::HANDLE::default();
+
+        let ok = unsafe {
+            LogonUserW(
+                PCWSTR(user_wide.as_ptr()),
+                PCWSTR(domain_wide.as_ptr()),
+                PCWSTR(pass_wide.as_ptr()),
+                LOGON32_LOGON_NETWORK,
+                LOGON32_PROVIDER_DEFAULT,
+                &mut token,
+            )
+        };
+
+        match ok {
+            Ok(()) => {
+                // Close the token handle — we only needed to verify
+                let _ = unsafe { CloseHandle(token) };
+                return Ok(());
+            }
+            Err(_) => {
+                bail!("Wrong password.");
+            }
+        }
+    }
+
+    // On macOS (Touch ID unavailable), there is no reliable non-PAM
+    // verification. Refuse the operation rather than pretending to verify.
+    #[cfg(target_os = "macos")]
+    {
         let _ = password;
-        Ok(())
+        bail!(
+            "Cannot verify identity: Touch ID unavailable and no fallback \
+             verifier on macOS. Please enable Touch ID or use an encrypted \
+             key file (.enc) instead."
+        );
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    {
+        let _ = password;
+        bail!("Cannot verify identity: no supported verifier on this platform.");
     }
 }
 
