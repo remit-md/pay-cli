@@ -368,13 +368,19 @@ fn handle_request_error(e: reqwest::Error, url: &str, silent: bool) -> Result<()
     let msg = e.to_string();
 
     if e.is_connect() {
-        let lower = msg.to_lowercase();
-        if lower.contains("dns")
-            || lower.contains("resolve")
-            || lower.contains("no such host")
-            || lower.contains("name or service not known")
-            || lower.contains("getaddrinfo")
-            || lower.contains("nodename nor servname")
+        // Check the full error chain for DNS-related strings.
+        // Different platforms surface DNS failures differently:
+        //   Windows: "No such host is known"
+        //   Linux glibc: "Name or service not known", "Temporary failure in name resolution"
+        //   macOS: "nodename nor servname provided"
+        //   hyper/reqwest: may wrap as "dns error" or "error looking up"
+        let chain = format!("{e:?}").to_lowercase();
+        if chain.contains("dns")
+            || chain.contains("resolve")
+            || chain.contains("no such host")
+            || chain.contains("not known")
+            || chain.contains("getaddrinfo")
+            || chain.contains("nodename nor servname")
         {
             if !silent {
                 eprintln!("pay: (6) Could not resolve host: {url}");
