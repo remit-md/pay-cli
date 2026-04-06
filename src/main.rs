@@ -17,7 +17,12 @@ use config::Config;
 
 /// pay — payment infrastructure for AI agents
 #[derive(Parser)]
-#[command(name = "pay", version, about, after_help = "Output is JSON by default. Use --plain for human-readable output.")]
+#[command(
+    name = "pay",
+    version,
+    about,
+    after_help = "Output is JSON by default. Use --plain for human-readable output."
+)]
 struct Cli {
     /// Human-readable output instead of JSON (JSON is the default)
     #[arg(long, global = true)]
