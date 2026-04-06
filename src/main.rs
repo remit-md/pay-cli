@@ -75,6 +75,8 @@ enum Commands {
         #[command(subcommand)]
         action: commands::key::KeyAction,
     },
+    /// Show or switch network (testnet/mainnet)
+    Network(commands::network::NetworkArgs),
     /// Show wallet address
     Address,
     /// Open funding page
@@ -128,6 +130,7 @@ async fn main() -> Result<()> {
         Commands::Signer { action } => commands::signer_cmd::run(action, ctx).await,
         Commands::Ows { action } => commands::ows_cmd::run(action, ctx).await,
         Commands::Key { action } => commands::key::run(action, ctx).await,
+        Commands::Network(args) => commands::network::run(args, ctx).await,
         Commands::Address => {
             commands::require_init()?;
             let addr = ctx.address()?;
