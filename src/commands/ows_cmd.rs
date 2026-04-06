@@ -75,7 +75,7 @@ fn jstr(v: &Value, key: &str) -> String {
 pub async fn run(action: OwsAction, ctx: super::Context) -> Result<()> {
     match action {
         OwsAction::Init(args) => run_init(args).await,
-        OwsAction::List(args) => run_list(args),
+        OwsAction::List(args) => run_list(args, &ctx),
         OwsAction::Fund(args) => run_fund(args, ctx),
         OwsAction::SetPolicy(args) => run_set_policy(args),
     }
@@ -133,10 +133,10 @@ async fn run_init(args: InitArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_list(args: ListArgs) -> Result<()> {
+fn run_list(args: ListArgs, ctx: &super::Context) -> Result<()> {
     let wallets = ows::list_wallets()?;
 
-    if args.json {
+    if args.json || ctx.json {
         let json = serde_json::to_string_pretty(&wallets)
             .map_err(|e| anyhow::anyhow!("JSON serialization failed: {e}"))?;
         println!("{json}");
