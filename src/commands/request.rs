@@ -115,9 +115,9 @@ pub async fn run(args: RequestArgs, mut ctx: super::Context) -> Result<()> {
             .as_array()
             .cloned()
             .unwrap_or_default();
-        let tab = tabs
-            .iter()
-            .find(|t| t["provider"].as_str() == Some(to.as_str()) && t["status"].as_str() == Some("open"));
+        let tab = tabs.iter().find(|t| {
+            t["provider"].as_str() == Some(to.as_str()) && t["status"].as_str() == Some("open")
+        });
 
         let tab_id = if let Some(t) = tab {
             t["id"].as_str().unwrap_or("").to_string()
