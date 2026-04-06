@@ -938,7 +938,9 @@ fn request_custom_headers() {
             let mut buf = [0u8; 4096];
             let n = stream.read(&mut buf).unwrap_or(0);
             let req = String::from_utf8_lossy(&buf[..n]);
-            let has_header = req.contains("X-Custom: test-value");
+            let req_lower = req.to_lowercase();
+            let has_header = req_lower.contains("x-custom: test-value")
+                || req_lower.contains("x-custom:test-value");
             let body = if has_header {
                 r#"{"header":"found"}"#
             } else {

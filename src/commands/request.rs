@@ -369,7 +369,13 @@ fn handle_request_error(e: reqwest::Error, url: &str, silent: bool) -> Result<()
 
     if e.is_connect() {
         let lower = msg.to_lowercase();
-        if lower.contains("dns") || lower.contains("resolve") || lower.contains("no such host") {
+        if lower.contains("dns")
+            || lower.contains("resolve")
+            || lower.contains("no such host")
+            || lower.contains("name or service not known")
+            || lower.contains("getaddrinfo")
+            || lower.contains("nodename nor servname")
+        {
             if !silent {
                 eprintln!("pay: (6) Could not resolve host: {url}");
             }
