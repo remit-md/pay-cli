@@ -69,7 +69,8 @@ impl Config {
                 .is_some_and(|u| u.contains("testnet"))
     }
 
-    /// Human-readable network name.
+    /// Human-readable network name. Used by `pay network` command.
+    #[allow(dead_code)]
     pub fn network_name(&self) -> &str {
         if self.is_testnet() {
             "Base Sepolia (testnet)"
@@ -79,6 +80,7 @@ impl Config {
     }
 
     /// Switch to testnet config. Clears router_address so bootstrap can re-fetch.
+    #[allow(dead_code)]
     pub fn set_testnet(&mut self) {
         self.testnet = Some(true);
         self.chain_id = Some(84532);
@@ -87,6 +89,7 @@ impl Config {
     }
 
     /// Switch to mainnet config. Clears router_address so bootstrap can re-fetch.
+    #[allow(dead_code)]
     pub fn set_mainnet(&mut self) {
         self.testnet = Some(false);
         self.chain_id = Some(8453);
