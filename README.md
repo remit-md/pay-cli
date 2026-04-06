@@ -112,6 +112,12 @@ pay tab close <tab_id>                Close a tab
 pay tab topup <tab_id> <amount>       Add funds to open tab
 pay tab list                          List open tabs
 pay request <url>                     x402 request (auto-pay)
+  -X <METHOD>                          HTTP method (default: GET, POST if -d)
+  -H "Key: Value"                      Add header (repeatable)
+  -d <body>                            Request body (@file reads from file)
+  -o <file>                            Write response to file
+  -v / -s                              Verbose / silent
+  --no-pay                             Skip x402 payment handling
 pay webhook register <url>            Register webhook endpoint
 pay webhook list                      List registered webhooks
 pay webhook delete <id>               Remove a webhook

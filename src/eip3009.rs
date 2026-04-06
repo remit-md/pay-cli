@@ -43,6 +43,13 @@ impl TransferAuthorization {
             "s": self.s,
         })
     }
+
+    /// Compact 65-byte hex signature (r + s + v) for x402 v2 PaymentPayload.
+    pub fn combined_signature(&self) -> String {
+        let r = self.r.strip_prefix("0x").unwrap_or(&self.r);
+        let s = self.s.strip_prefix("0x").unwrap_or(&self.s);
+        format!("0x{r}{s}{:02x}", self.v)
+    }
 }
 
 /// Sign an EIP-3009 TransferWithAuthorization for x402 direct settlement.
