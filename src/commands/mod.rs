@@ -54,13 +54,13 @@ impl Context {
 
     /// Build auth headers for a request.
     fn auth_headers(&mut self, method: &str, path: &str) -> Result<Vec<(String, String)>> {
-        let chain_id = self.config.chain_id();
         let router = self.config.router_address().to_string();
         if router.is_empty() {
             bail!(
-                "router_address not set in config. Set ROUTER_ADDRESS or update ~/.pay/config.toml"
+                "router_address not set in config. Run `pay init` or `pay network testnet`."
             );
         }
+        let chain_id = self.config.chain_id();
         let key = self.load_key()?;
         auth::build_auth_headers(key, method, path, chain_id, &router)
     }
@@ -85,6 +85,7 @@ impl Context {
     }
 
     /// Make an authenticated GET request to the API.
+    /// On 401, tries to refresh config from server and retry once.
     pub async fn get(&mut self, path: &str) -> Result<serde_json::Value> {
         let url = format!("{}{}", self.api_url(), path);
         let sign_path = self.full_path(path);
@@ -94,6 +95,26 @@ impl Context {
             req = req.header(k, v);
         }
         let resp = req.send().await?;
+        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            if self.try_refresh_config().await {
+                // Retry with refreshed config
+                let sign_path = self.full_path(path);
+                let headers = self.auth_headers("GET", &sign_path)?;
+                let mut req = self.http.get(&url);
+                for (k, v) in &headers {
+                    req = req.header(k, v);
+                }
+                let resp = req.send().await?;
+                if !resp.status().is_success() {
+                    let status = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    bail!("API error ({status}): {body}");
+                }
+                return Ok(resp.json().await?);
+            }
+            let body = resp.text().await.unwrap_or_default();
+            bail!("API error (401 Unauthorized): {body}");
+        }
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
@@ -103,6 +124,7 @@ impl Context {
     }
 
     /// Make an authenticated POST request to the API.
+    /// On 401, tries to refresh config from server and retry once.
     pub async fn post(
         &mut self,
         path: &str,
@@ -116,6 +138,25 @@ impl Context {
             req = req.header(k, v);
         }
         let resp = req.send().await?;
+        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            if self.try_refresh_config().await {
+                let sign_path = self.full_path(path);
+                let headers = self.auth_headers("POST", &sign_path)?;
+                let mut req = self.http.post(&url).json(body);
+                for (k, v) in &headers {
+                    req = req.header(k, v);
+                }
+                let resp = req.send().await?;
+                if !resp.status().is_success() {
+                    let status = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    bail!("API error ({status}): {body}");
+                }
+                return Ok(resp.json().await?);
+            }
+            let body = resp.text().await.unwrap_or_default();
+            bail!("API error (401 Unauthorized): {body}");
+        }
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
@@ -125,6 +166,7 @@ impl Context {
     }
 
     /// Make an authenticated DELETE request to the API.
+    /// On 401, tries to refresh config from server and retry once.
     pub async fn del(&mut self, path: &str) -> Result<()> {
         let url = format!("{}{}", self.api_url(), path);
         let sign_path = self.full_path(path);
@@ -134,12 +176,42 @@ impl Context {
             req = req.header(k, v);
         }
         let resp = req.send().await?;
+        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            if self.try_refresh_config().await {
+                let sign_path = self.full_path(path);
+                let headers = self.auth_headers("DELETE", &sign_path)?;
+                let mut req = self.http.delete(&url);
+                for (k, v) in &headers {
+                    req = req.header(k, v);
+                }
+                let resp = req.send().await?;
+                if !resp.status().is_success() {
+                    let status = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    bail!("API error ({status}): {body}");
+                }
+                return Ok(());
+            }
+            let body = resp.text().await.unwrap_or_default();
+            bail!("API error (401 Unauthorized): {body}");
+        }
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
             bail!("API error ({status}): {body}");
         }
         Ok(())
+    }
+
+    /// Try to refresh config from server (fetch fresh router address).
+    /// Returns true if config was updated and a retry is worthwhile.
+    async fn try_refresh_config(&mut self) -> bool {
+        if let Ok(()) = self.config.bootstrap_from_server().await {
+            if let Ok(()) = self.config.save() {
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -279,6 +351,7 @@ mod tests {
     #[test]
     fn test_full_path_default() {
         let ctx = Context::new(false, crate::config::Config::default());
+        // Default is now mainnet (pay-skill.com/api/v1)
         assert_eq!(ctx.full_path("/direct"), "/api/v1/direct");
     }
 }

@@ -16,16 +16,14 @@ pub struct Config {
 }
 
 impl Config {
-    /// Get chain_id, defaulting to Base Sepolia testnet until mainnet is deployed.
+    /// Get chain_id, defaulting to Base mainnet.
     pub fn chain_id(&self) -> u64 {
-        self.chain_id.unwrap_or(84532)
+        self.chain_id.unwrap_or(8453)
     }
 
-    /// Get router address. Defaults to testnet router until mainnet is deployed.
+    /// Get router address. Fetched from server during init; empty if not yet set.
     pub fn router_address(&self) -> &str {
-        self.router_address
-            .as_deref()
-            .unwrap_or("0xE0Aa45e6937F3b9Fc0BEe457361885Cb9bfC067F")
+        self.router_address.as_deref().unwrap_or("")
     }
 
     /// Load config from ~/.pay/config.toml. Returns default if file doesn't exist.
@@ -54,26 +52,76 @@ impl Config {
         Ok(())
     }
 
-    /// Get the effective API URL. Defaults to testnet until mainnet is deployed.
+    /// Get the effective API URL. Defaults to mainnet.
     pub fn api_url(&self) -> &str {
         self.api_url
             .as_deref()
-            .unwrap_or("https://testnet.pay-skill.com/api/v1")
+            .unwrap_or("https://pay-skill.com/api/v1")
     }
 
     /// Check if this config points at a testnet.
     pub fn is_testnet(&self) -> bool {
-        self.testnet.unwrap_or(false)
-            || self.chain_id == Some(84532)
+        self.chain_id == Some(84532)
+            || self.testnet == Some(true)
             || self
                 .api_url
                 .as_deref()
                 .is_some_and(|u| u.contains("testnet"))
     }
 
+    /// Human-readable network name.
+    pub fn network_name(&self) -> &str {
+        if self.is_testnet() {
+            "Base Sepolia (testnet)"
+        } else {
+            "Base (mainnet)"
+        }
+    }
+
+    /// Switch to testnet config. Clears router_address so bootstrap can re-fetch.
+    pub fn set_testnet(&mut self) {
+        self.testnet = Some(true);
+        self.chain_id = Some(84532);
+        self.api_url = Some("https://testnet.pay-skill.com/api/v1".to_string());
+        self.router_address = None;
+    }
+
+    /// Switch to mainnet config. Clears router_address so bootstrap can re-fetch.
+    pub fn set_mainnet(&mut self) {
+        self.testnet = Some(false);
+        self.chain_id = Some(8453);
+        self.api_url = Some("https://pay-skill.com/api/v1".to_string());
+        self.router_address = None;
+    }
+
     /// Check if config file exists (i.e., `pay init` has been run).
     pub fn is_initialized() -> bool {
         config_path().exists()
+    }
+
+    /// Fetch contract addresses from the server's /contracts endpoint
+    /// and populate router_address (and chain_id if not set).
+    pub async fn bootstrap_from_server(&mut self) -> Result<()> {
+        let url = format!("{}/contracts", self.api_url());
+        let resp = reqwest::get(&url)
+            .await
+            .with_context(|| format!("Failed to reach {url}"))?;
+        if !resp.status().is_success() {
+            anyhow::bail!("Server returned {} from /contracts", resp.status());
+        }
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .with_context(|| "Failed to parse /contracts response")?;
+        if let Some(chain_id) = body["chain_id"].as_u64() {
+            if self.chain_id.is_none() {
+                self.chain_id = Some(chain_id);
+            }
+        }
+        if let Some(router) = body["router"].as_str() {
+            self.router_address = Some(router.to_string());
+        }
+        Ok(())
     }
 }
 
@@ -91,7 +139,7 @@ mod tests {
     #[test]
     fn test_default_api_url() {
         let config = Config::default();
-        assert_eq!(config.api_url(), "https://testnet.pay-skill.com/api/v1");
+        assert_eq!(config.api_url(), "https://pay-skill.com/api/v1");
     }
 
     #[test]
