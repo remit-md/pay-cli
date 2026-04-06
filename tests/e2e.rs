@@ -142,7 +142,7 @@ fn unsigned_request_rejected() {
     cmd.arg("--router-address").arg(TESTNET_ROUTER);
     // Deliberately remove PAYSKILL_SIGNER_KEY — no key means no auth.
     cmd.env_remove("PAYSKILL_SIGNER_KEY");
-    cmd.args(["--json", "status"]);
+    cmd.args(["status"]);
     cmd.assert().failure();
 }
 
@@ -152,7 +152,7 @@ fn unsigned_request_rejected() {
 #[ignore = "requires PAYSKILL_TESTNET_KEY"]
 fn status_returns_balance() {
     pay()
-        .args(["--json", "status"])
+        .args(["status"])
         .assert()
         .success()
         .stdout(predicate::str::contains("balance"));
@@ -164,7 +164,7 @@ fn status_returns_balance() {
 #[ignore = "requires PAYSKILL_TESTNET_KEY"]
 fn mint_testnet_usdc() {
     let output = pay()
-        .args(["--json", "mint", "100.00"])
+        .args(["mint", "100.00"])
         .output()
         .expect("failed to run mint");
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -184,14 +184,7 @@ fn mint_testnet_usdc() {
 #[ignore = "requires PAYSKILL_TESTNET_KEY"]
 fn direct_payment_succeeds() {
     pay()
-        .args([
-            "--json",
-            "direct",
-            &provider_addr(),
-            "1.00",
-            "--memo",
-            "e2e-test",
-        ])
+        .args(["direct", &provider_addr(), "1.00", "--memo", "e2e-test"])
         .assert()
         .success()
         .stdout(predicate::str::contains("tx_hash"));
@@ -205,7 +198,6 @@ fn tab_lifecycle() {
     // 1. Open tab
     let open_output = pay()
         .args([
-            "--json",
             "tab",
             "open",
             &provider_addr(),
@@ -231,7 +223,7 @@ fn tab_lifecycle() {
 
     // 2. List tabs — new tab should appear
     let list_output = pay()
-        .args(["--json", "tab", "list"])
+        .args(["tab", "list"])
         .output()
         .expect("failed to run tab list");
     assert!(list_output.status.success(), "tab list failed");
@@ -243,7 +235,7 @@ fn tab_lifecycle() {
 
     // 3. Top up
     let topup_output = pay()
-        .args(["--json", "tab", "topup", tab_id, "5.00"])
+        .args(["tab", "topup", tab_id, "5.00"])
         .output()
         .expect("failed to run tab topup");
     assert!(
@@ -261,7 +253,7 @@ fn tab_lifecycle() {
 
     // 4. Close tab
     pay()
-        .args(["--json", "tab", "close", tab_id])
+        .args(["tab", "close", tab_id])
         .assert()
         .success()
         .stdout(predicate::str::contains("total_charged").or(predicate::str::contains("closed")));
@@ -282,7 +274,7 @@ fn webhook_crud() {
 
     // 1. Register
     let reg_output = pay()
-        .args(["--json", "webhook", "register", &hook_url])
+        .args(["webhook", "register", &hook_url])
         .output()
         .expect("failed to run webhook register");
     assert!(
@@ -299,7 +291,7 @@ fn webhook_crud() {
 
     // 2. List — should include new webhook
     let list_output = pay()
-        .args(["--json", "webhook", "list"])
+        .args(["webhook", "list"])
         .output()
         .expect("failed to run webhook list");
     assert!(list_output.status.success(), "webhook list failed");
@@ -354,7 +346,7 @@ fn sign_subprocess_produces_valid_signature() {
 #[ignore = "requires PAYSKILL_TESTNET_KEY"]
 fn fund_returns_link() {
     let output = pay()
-        .args(["--json", "fund"])
+        .args(["fund"])
         .output()
         .expect("failed to run pay fund");
 
@@ -375,7 +367,7 @@ fn fund_returns_link() {
 fn withdraw_returns_link() {
     let addr = provider_addr();
     let output = pay()
-        .args(["--json", "withdraw", &addr, "1.00"])
+        .args(["withdraw", &addr, "1.00"])
         .output()
         .expect("failed to run pay withdraw");
 
@@ -443,11 +435,7 @@ fn x402_request_handles_402_and_pays() {
 
     // Run `pay request` against our local server
     let output = pay()
-        .args([
-            "--json",
-            "request",
-            &format!("http://127.0.0.1:{port}/content"),
-        ])
+        .args(["request", &format!("http://127.0.0.1:{port}/content")])
         .timeout(std::time::Duration::from_secs(120))
         .output()
         .expect("failed to run pay request");
@@ -562,7 +550,7 @@ fn ows_list_without_ows_shows_error_or_empty() {
 fn ows_list_json_without_ows() {
     let output = Command::cargo_bin("pay")
         .expect("binary not found")
-        .args(["--json", "ows", "list"])
+        .args(["ows", "list"])
         .output()
         .expect("failed to run");
 
@@ -685,7 +673,7 @@ fn key_init_help() {
 fn key_init_generates_keypair() {
     let output = Command::cargo_bin("pay")
         .expect("binary not found")
-        .args(["--json", "key", "init"])
+        .args(["key", "init"])
         .output()
         .expect("failed to run");
     assert!(output.status.success());
@@ -769,7 +757,7 @@ fn ows_list_shows_wallets() {
 
     let output = Command::cargo_bin("pay")
         .expect("binary not found")
-        .args(["--json", "ows", "list"])
+        .args(["ows", "list"])
         .output()
         .expect("failed to run ows list");
 
