@@ -365,8 +365,6 @@ async fn output_response(resp: reqwest::Response, args: &RequestArgs) -> Result<
 
 /// Translate reqwest errors into curl-style messages and exit codes.
 fn handle_request_error(e: reqwest::Error, url: &str, silent: bool) -> Result<()> {
-    let msg = e.to_string();
-
     if e.is_connect() {
         // Check the full error chain for DNS-related strings.
         // Different platforms surface DNS failures differently:
