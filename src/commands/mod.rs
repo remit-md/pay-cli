@@ -56,9 +56,7 @@ impl Context {
     fn auth_headers(&mut self, method: &str, path: &str) -> Result<Vec<(String, String)>> {
         let router = self.config.router_address().to_string();
         if router.is_empty() {
-            bail!(
-                "router_address not set in config. Run `pay init` or `pay network testnet`."
-            );
+            bail!("router_address not set in config. Run `pay init` or `pay network testnet`.");
         }
         let chain_id = self.config.chain_id();
         let key = self.load_key()?;
