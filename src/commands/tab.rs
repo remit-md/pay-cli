@@ -230,12 +230,30 @@ async fn run_list(ctx: &mut super::Context) -> Result<()> {
                 for tab in tabs {
                     let id = tab["id"].as_str().unwrap_or("?");
                     let provider = tab["provider"].as_str().unwrap_or("?");
-                    let balance = tab["balance_remaining"].as_u64().unwrap_or(0);
+                    let effective = tab["effective_balance"].as_u64().unwrap_or(0);
+                    let pending_count = tab["pending_charge_count"].as_i64().unwrap_or(0);
+                    let pending_total = tab["pending_charge_total"].as_u64().unwrap_or(0);
+                    let charges = tab["charge_count"].as_i64().unwrap_or(0);
                     let status = tab["status"].as_str().unwrap_or("?");
+                    let balance_str = if pending_count > 0 {
+                        format!(
+                            "{} ({} pending settlement)",
+                            super::format_amount(effective),
+                            super::format_amount(pending_total),
+                        )
+                    } else {
+                        super::format_amount(effective)
+                    };
+                    let charges_str = if pending_count > 0 {
+                        format!("{charges} (+{pending_count} pending)")
+                    } else {
+                        charges.to_string()
+                    };
                     error::print_kv(&[
                         ("Tab", id),
                         ("Provider", provider),
-                        ("Balance", &super::format_amount(balance)),
+                        ("Balance", &balance_str),
+                        ("Charges", &charges_str),
                         ("Status", status),
                     ]);
                 }
