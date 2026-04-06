@@ -488,14 +488,14 @@ fn init_help_describes_default_signer() {
 }
 
 #[test]
-fn top_level_help_shows_ows_and_key() {
+fn top_level_help_shows_ows() {
     Command::cargo_bin("pay")
         .expect("binary not found")
         .args(["--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("ows"))
-        .stdout(predicate::str::contains("key"));
+        .stdout(predicate::str::contains("ows"));
+    // `key` is hidden from help (dev-only command)
 }
 
 // ── pay ows ──────────────────────────────────────────────────────────
