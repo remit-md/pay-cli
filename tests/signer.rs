@@ -69,7 +69,7 @@ fn init_no_keychain_address_works() {
     // Address should work
     let mut cmd = pay_cmd(&keys_path, home.path());
     cmd.env("PAYSKILL_SIGNER_KEY", TEST_PASSWORD);
-    cmd.arg("address");
+    cmd.args(["--plain", "address"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::starts_with("0x"));
@@ -106,7 +106,7 @@ fn signer_import_no_keychain_correct_address() {
     // Verify address matches
     let mut cmd = pay_cmd(&keys_path, home.path());
     cmd.env("PAYSKILL_SIGNER_KEY", TEST_PASSWORD);
-    cmd.arg("address");
+    cmd.args(["--plain", "address"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains(ANVIL_ADDR));
