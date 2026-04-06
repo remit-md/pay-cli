@@ -83,11 +83,14 @@ pub async fn run(args: RequestArgs, mut ctx: super::Context) -> Result<()> {
         args.max_time,
         &[],
     );
-    let resp = req.send().await?;
+    let resp = match req.send().await {
+        Ok(r) => r,
+        Err(e) => return handle_request_error(e, &args.url, args.silent),
+    };
 
     // Not 402 or --no-pay: output and return
     if resp.status().as_u16() != 402 || args.no_pay {
-        return output_response(resp, &args, &ctx).await;
+        return output_response(resp, &args).await;
     }
 
     // ── x402 payment flow ──────────────────────────────────────────────
@@ -202,9 +205,12 @@ pub async fn run(args: RequestArgs, mut ctx: super::Context) -> Result<()> {
         args.max_time,
         &extra,
     );
-    let retry_resp = retry_req.send().await?;
+    let retry_resp = match retry_req.send().await {
+        Ok(r) => r,
+        Err(e) => return handle_request_error(e, &args.url, args.silent),
+    };
 
-    output_response(retry_resp, &args, &ctx).await
+    output_response(retry_resp, &args).await
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -335,13 +341,7 @@ fn print_verbose_response(resp: &reqwest::Response) {
     eprintln!("<");
 }
 
-async fn output_response(
-    resp: reqwest::Response,
-    args: &RequestArgs,
-    ctx: &super::Context,
-) -> Result<()> {
-    let status = resp.status();
-
+async fn output_response(resp: reqwest::Response, args: &RequestArgs) -> Result<()> {
     if args.verbose {
         print_verbose_response(&resp);
     }
@@ -357,24 +357,49 @@ async fn output_response(
         return Ok(());
     }
 
-    // JSON mode (global --json flag)
-    if ctx.json {
-        let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!(null));
-        error::print_json(&body);
-        return Ok(());
-    }
-
-    // Silent: body only, no status prefix
-    if args.silent {
-        let body = resp.text().await.unwrap_or_default();
-        print!("{body}");
-        return Ok(());
-    }
-
-    // Default: status + body
+    // Default: raw body to stdout (like curl)
     let body = resp.text().await.unwrap_or_default();
-    error::success(&format!("[{status}] {body}"));
+    print!("{body}");
     Ok(())
+}
+
+/// Translate reqwest errors into curl-style messages and exit codes.
+fn handle_request_error(e: reqwest::Error, url: &str, silent: bool) -> Result<()> {
+    if e.is_connect() {
+        // Check the full error chain for DNS-related strings.
+        // Different platforms surface DNS failures differently:
+        //   Windows: "No such host is known"
+        //   Linux glibc: "Name or service not known", "Temporary failure in name resolution"
+        //   macOS: "nodename nor servname provided"
+        //   hyper/reqwest: may wrap as "dns error" or "error looking up"
+        let chain = format!("{e:?}").to_lowercase();
+        if chain.contains("dns")
+            || chain.contains("resolve")
+            || chain.contains("no such host")
+            || chain.contains("not known")
+            || chain.contains("getaddrinfo")
+            || chain.contains("nodename nor servname")
+        {
+            if !silent {
+                eprintln!("pay: (6) Could not resolve host: {url}");
+            }
+            std::process::exit(6);
+        }
+        if !silent {
+            eprintln!("pay: (7) Failed to connect to host: {url}");
+        }
+        std::process::exit(7);
+    }
+
+    if e.is_timeout() {
+        if !silent {
+            eprintln!("pay: (28) Operation timed out: {url}");
+        }
+        std::process::exit(28);
+    }
+
+    // Unknown error — let anyhow format it
+    Err(e.into())
 }
 
 // ── x402 v2 parsing ───────────────────────────────────────────────────

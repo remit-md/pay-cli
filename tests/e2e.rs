@@ -767,3 +767,259 @@ fn ows_list_shows_wallets() {
         serde_json::from_str(stdout.trim()).expect("ows list should output valid JSON");
     assert!(parsed.is_array(), "ows list should return an array");
 }
+
+// ── pay request (local, no testnet key) ───────────────────────────
+
+/// Spin up a one-shot TCP server that returns a fixed HTTP response.
+/// Returns the port. The server handles exactly `n` connections then exits.
+fn spawn_http_server(response: &str, connections: usize) -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind failed");
+    let port = listener.local_addr().unwrap().port();
+    let response = response.to_string();
+    std::thread::spawn(move || {
+        for _ in 0..connections {
+            if let Ok((mut stream, _)) = listener.accept() {
+                use std::io::{Read, Write};
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(response.as_bytes());
+            }
+        }
+    });
+    // Give the server a moment to start listening
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    port
+}
+
+/// Build an HTTP response string from status, content-type, and body.
+fn http_response(status: &str, content_type: &str, body: &str) -> String {
+    format!(
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+}
+
+#[test]
+fn request_non_json_response_prints_raw() {
+    let html = "<html><body>Hello World</body></html>";
+    let port = spawn_http_server(&http_response("200 OK", "text/html", html), 1);
+    let output = pay_local()
+        .args(["request", &format!("http://127.0.0.1:{port}/page")])
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Hello World"),
+        "should print raw HTML, got: {stdout}"
+    );
+    assert!(
+        !stdout.contains("null"),
+        "should NOT print null, got: {stdout}"
+    );
+}
+
+#[test]
+fn request_json_response_prints_raw() {
+    let json = r#"{"data":"value","count":42}"#;
+    let port = spawn_http_server(&http_response("200 OK", "application/json", json), 1);
+    let output = pay_local()
+        .args(["request", &format!("http://127.0.0.1:{port}/api")])
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(r#""data":"value""#),
+        "should print raw JSON, got: {stdout}"
+    );
+}
+
+#[test]
+fn request_dns_error_clean_message() {
+    let output = pay_local()
+        .args(["request", "https://this-host-does-not-exist.invalid/path"])
+        .output()
+        .expect("failed to run");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("pay: (6)") && stderr.contains("Could not resolve host"),
+        "should print clean DNS error, got: {stderr}"
+    );
+    // Exit code 6 (may be masked to 6 or modulo'd by OS)
+    let code = output.status.code().unwrap_or(-1);
+    assert_eq!(code, 6, "exit code should be 6, got: {code}");
+}
+
+#[test]
+fn request_silent_mode() {
+    let body = "silent-test-body";
+    let port = spawn_http_server(&http_response("200 OK", "text/plain", body), 1);
+    let output = pay_local()
+        .args(["request", "-s", &format!("http://127.0.0.1:{port}/silent")])
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.as_ref(), body, "body should be exact match");
+}
+
+#[test]
+fn request_verbose_shows_headers() {
+    let port = spawn_http_server(&http_response("200 OK", "text/plain", "ok"), 1);
+    let output = pay_local()
+        .args(["request", "-v", &format!("http://127.0.0.1:{port}/verbose")])
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("> GET"),
+        "verbose should show request line, got stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("< 200"),
+        "verbose should show response status, got stderr: {stderr}"
+    );
+}
+
+#[test]
+fn request_output_to_file() {
+    let body = "file-output-test";
+    let port = spawn_http_server(&http_response("200 OK", "text/plain", body), 1);
+    let dir = tempfile::tempdir().expect("tmpdir");
+    let outfile = dir.path().join("out.txt");
+    let output = pay_local()
+        .args([
+            "request",
+            "-o",
+            outfile.to_str().unwrap(),
+            &format!("http://127.0.0.1:{port}/file"),
+        ])
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success());
+    let contents = std::fs::read_to_string(&outfile).expect("read output file");
+    assert_eq!(contents, body);
+}
+
+#[test]
+fn request_post_with_body() {
+    // Server echoes back whatever it receives (we just check it doesn't error)
+    let port = spawn_http_server(
+        &http_response("200 OK", "application/json", r#"{"ok":true}"#),
+        1,
+    );
+    let output = pay_local()
+        .args([
+            "request",
+            "-X",
+            "POST",
+            "-d",
+            r#"{"q":"test"}"#,
+            &format!("http://127.0.0.1:{port}/search"),
+        ])
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("ok"), "should get response, got: {stdout}");
+}
+
+#[test]
+fn request_custom_headers() {
+    // Server that checks for custom header in request and responds accordingly
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            use std::io::{Read, Write};
+            let mut buf = [0u8; 4096];
+            let n = stream.read(&mut buf).unwrap_or(0);
+            let req = String::from_utf8_lossy(&buf[..n]);
+            let req_lower = req.to_lowercase();
+            let has_header = req_lower.contains("x-custom: test-value")
+                || req_lower.contains("x-custom:test-value");
+            let body = if has_header {
+                r#"{"header":"found"}"#
+            } else {
+                r#"{"header":"missing"}"#
+            };
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(resp.as_bytes());
+        }
+    });
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    let output = pay_local()
+        .args([
+            "request",
+            "-H",
+            "X-Custom: test-value",
+            &format!("http://127.0.0.1:{port}/headers"),
+        ])
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(r#""header":"found"#),
+        "custom header should reach server, got: {stdout}"
+    );
+}
+
+#[test]
+fn request_no_pay_skips_402() {
+    let body = r#"{"error":"payment_required","price":"$1.00"}"#;
+    let port = spawn_http_server(
+        &http_response("402 Payment Required", "application/json", body),
+        1,
+    );
+    let output = pay_local()
+        .args([
+            "request",
+            "--no-pay",
+            &format!("http://127.0.0.1:{port}/paid"),
+        ])
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("payment_required"),
+        "should print raw 402 body, got: {stdout}"
+    );
+}
+
+#[test]
+fn request_at_file_body() {
+    let dir = tempfile::tempdir().expect("tmpdir");
+    let input_file = dir.path().join("input.json");
+    std::fs::write(&input_file, r#"{"from":"file"}"#).expect("write input file");
+
+    let port = spawn_http_server(
+        &http_response("200 OK", "application/json", r#"{"ok":true}"#),
+        1,
+    );
+    let output = pay_local()
+        .args([
+            "request",
+            "-X",
+            "POST",
+            "-d",
+            &format!("@{}", input_file.to_str().unwrap()),
+            &format!("http://127.0.0.1:{port}/upload"),
+        ])
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("ok"),
+        "should get response after @file body, got: {stdout}"
+    );
+}
