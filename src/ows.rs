@@ -151,19 +151,74 @@ pub fn wallet_evm_address(wallet: &Value) -> Option<String> {
 pub fn create_wallet(name: &str) -> Result<Value> {
     let stdout = run_ows(&["wallet", "create", "--name", name])?;
 
-    // Parse wallet ID from "Wallet created: {uuid}"
+    // Parse wallet ID from "Wallet created: {uuid}" or similar patterns
     let id = stdout
         .lines()
-        .find(|l| l.starts_with("Wallet created:"))
-        .and_then(|l| l.strip_prefix("Wallet created:"))
-        .map(|s| s.trim().to_string())
+        .find_map(|l| {
+            // Try "Wallet created: {uuid}" pattern
+            if let Some(rest) = l.strip_prefix("Wallet created:") {
+                return Some(rest.trim().to_string());
+            }
+            // Try any line containing a UUID-like pattern
+            l.split_whitespace()
+                .find(|w| w.len() >= 32 && w.contains('-'))
+                .map(|s| s.to_string())
+        })
         .ok_or_else(|| anyhow::anyhow!("failed to parse wallet ID from ows output: {stdout}"))?;
 
-    // Read the wallet JSON from vault
-    let path = vault_dir().join("wallets").join(format!("{id}.json"));
-    let content = std::fs::read_to_string(&path)
-        .with_context(|| format!("wallet created but file not found: {}", path.display()))?;
-    serde_json::from_str(&content).context("failed to parse wallet JSON")
+    // Try reading the wallet JSON from vault (multiple strategies)
+    let wallets_dir = vault_dir().join("wallets");
+
+    // Strategy 1: exact {id}.json
+    let path = wallets_dir.join(format!("{id}.json"));
+    if let Ok(content) = std::fs::read_to_string(&path) {
+        return serde_json::from_str(&content).context("failed to parse wallet JSON");
+    }
+
+    // Strategy 2: find by name in existing wallet files
+    if wallets_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&wallets_dir) {
+            // Collect JSON files sorted by modification time (newest first)
+            let mut files: Vec<_> = entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+                .collect();
+            files.sort_by(|a, b| {
+                let t_a = a.metadata().and_then(|m| m.modified()).ok();
+                let t_b = b.metadata().and_then(|m| m.modified()).ok();
+                t_b.cmp(&t_a)
+            });
+
+            for entry in &files {
+                if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                    if let Ok(wallet) = serde_json::from_str::<Value>(&content) {
+                        let wname = wallet["name"].as_str().unwrap_or("");
+                        if wname == name {
+                            return Ok(wallet);
+                        }
+                    }
+                }
+            }
+
+            // Strategy 3: newest file (just-created)
+            if let Some(newest) = files.first() {
+                if let Ok(content) = std::fs::read_to_string(newest.path()) {
+                    if let Ok(wallet) = serde_json::from_str::<Value>(&content) {
+                        return Ok(wallet);
+                    }
+                }
+            }
+        }
+    }
+
+    bail!(
+        "wallet created but file not found.\n\
+         Expected: {}\n\
+         Vault dir: {}\n\
+         OWS output: {stdout}",
+        path.display(),
+        wallets_dir.display()
+    );
 }
 
 // ── Create policy ───────────────────────────────────────────────────
