@@ -91,6 +91,8 @@ enum Commands {
     Withdraw(WithdrawArgs),
     /// Mint testnet USDC (testnet only)
     Mint(MintArgs),
+    /// Search for discoverable paid API services
+    Discover(commands::discover::DiscoverArgs),
 }
 
 #[derive(clap::Args)]
@@ -201,5 +203,6 @@ async fn main() -> Result<()> {
             }
             Ok(())
         }
+        Commands::Discover(args) => commands::discover::run(args, ctx).await,
     }
 }

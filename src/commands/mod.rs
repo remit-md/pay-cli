@@ -1,4 +1,5 @@
 pub mod direct;
+pub mod discover;
 pub mod init;
 pub mod key;
 pub mod network;
