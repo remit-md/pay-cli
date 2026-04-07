@@ -67,12 +67,7 @@ pub async fn run(args: DiscoverArgs, ctx: super::Context) -> Result<()> {
                     // Extract lowest price from routes
                     let price = svc["routes"]
                         .as_array()
-                        .and_then(|routes| {
-                            routes
-                                .iter()
-                                .filter_map(|r| r["price"].as_str())
-                                .next()
-                        })
+                        .and_then(|routes| routes.iter().filter_map(|r| r["price"].as_str()).next())
                         .unwrap_or("-");
 
                     println!(
