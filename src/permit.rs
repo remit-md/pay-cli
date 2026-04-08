@@ -116,6 +116,10 @@ pub struct ContractAddresses {
 impl ContractAddresses {
     /// Active tab contract: prefers tab_v2 (PayTabV3+) over v1.
     pub fn active_tab(&self) -> &str {
-        if self.tab_v2.is_empty() { &self.tab } else { &self.tab_v2 }
+        if self.tab_v2.is_empty() {
+            &self.tab
+        } else {
+            &self.tab_v2
+        }
     }
 }
