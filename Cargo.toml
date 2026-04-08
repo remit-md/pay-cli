@@ -4,7 +4,7 @@ version = "0.2.1"
 edition = "2021"
 description = "CLI for pay — payment infrastructure for AI agents"
 license = "MIT"
-repository = "https://github.com/remit-md/pay-cli"
+repository = "https://github.com/pay-skill/pay-cli"
 
 [[bin]]
 name = "pay"
