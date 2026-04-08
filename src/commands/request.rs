@@ -128,7 +128,8 @@ pub async fn run(args: RequestArgs, mut ctx: super::Context) -> Result<()> {
             let tab_amount = std::cmp::max(amount * 10, 5_000_000);
             let contracts = crate::permit::get_contracts(&mut ctx).await?;
             let permit =
-                crate::permit::prepare_and_sign(&mut ctx, tab_amount, &contracts.tab).await?;
+                crate::permit::prepare_and_sign(&mut ctx, tab_amount, contracts.active_tab())
+                    .await?;
             let open_body = serde_json::json!({
                 "provider": to,
                 "amount": tab_amount,

@@ -78,12 +78,12 @@ async fn run_open(args: TabOpenArgs, ctx: &mut super::Context) -> Result<()> {
 
     // Fetch contract addresses to determine the spender (PayTab contract)
     let contracts = crate::permit::get_contracts(ctx).await?;
-    if contracts.tab.is_empty() {
+    if contracts.active_tab().is_empty() {
         anyhow::bail!("PayTab contract address not available from server");
     }
 
     // Sign EIP-2612 permit for USDC approval
-    let permit = crate::permit::prepare_and_sign(ctx, amount, &contracts.tab).await?;
+    let permit = crate::permit::prepare_and_sign(ctx, amount, contracts.active_tab()).await?;
 
     let body = serde_json::json!({
         "provider": args.provider,
@@ -158,12 +158,12 @@ async fn run_topup(args: TabTopupArgs, ctx: &mut super::Context) -> Result<()> {
 
     // Fetch contract addresses to determine the spender (PayTab contract)
     let contracts = crate::permit::get_contracts(ctx).await?;
-    if contracts.tab.is_empty() {
+    if contracts.active_tab().is_empty() {
         anyhow::bail!("PayTab contract address not available from server");
     }
 
     // Sign EIP-2612 permit for USDC approval
-    let permit = crate::permit::prepare_and_sign(ctx, amount, &contracts.tab).await?;
+    let permit = crate::permit::prepare_and_sign(ctx, amount, contracts.active_tab()).await?;
 
     let body = serde_json::json!({
         "amount": amount,

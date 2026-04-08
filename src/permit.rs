@@ -98,6 +98,7 @@ pub async fn get_contracts(ctx: &mut commands::Context) -> Result<ContractAddres
     Ok(ContractAddresses {
         router: resp["router"].as_str().unwrap_or_default().to_string(),
         tab: resp["tab"].as_str().unwrap_or_default().to_string(),
+        tab_v2: resp["tab_v2"].as_str().unwrap_or_default().to_string(),
         direct: resp["direct"].as_str().unwrap_or_default().to_string(),
         usdc: resp["usdc"].as_str().unwrap_or_default().to_string(),
     })
@@ -107,6 +108,18 @@ pub struct ContractAddresses {
     #[allow(dead_code)]
     pub router: String,
     pub tab: String,
+    pub tab_v2: String,
     pub direct: String,
     pub usdc: String,
+}
+
+impl ContractAddresses {
+    /// Active tab contract: prefers tab_v2 (PayTabV3+) over v1.
+    pub fn active_tab(&self) -> &str {
+        if self.tab_v2.is_empty() {
+            &self.tab
+        } else {
+            &self.tab_v2
+        }
+    }
 }
