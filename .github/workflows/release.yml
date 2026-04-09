@@ -92,14 +92,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Log in to Docker Hub
-        if: secrets.DOCKER_TOKEN != ''
-        uses: docker/login-action@v3
-        with:
-          username: payskill
-          password: ${{ secrets.DOCKER_TOKEN }}
-        continue-on-error: true
-
       - name: Build and push Docker image (GHCR)
         uses: docker/build-push-action@v6
         with:
@@ -108,17 +100,6 @@ jobs:
           tags: |
             ghcr.io/pay-skill/pay:${{ env.TAG }}
             ghcr.io/pay-skill/pay:latest
-
-      - name: Build and push Docker image (Docker Hub)
-        if: secrets.DOCKER_TOKEN != ''
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            payskill/pay:${{ env.TAG }}
-            payskill/pay:latest
-        continue-on-error: true
 
   crates-io:
     runs-on: ubuntu-latest
