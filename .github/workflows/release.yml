@@ -4,10 +4,18 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.2.2)"
+        required: true
 
 permissions:
   contents: write
   packages: write
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   build:
@@ -38,6 +46,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TAG }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -96,7 +106,7 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/pay-skill/pay:${{ github.ref_name }}
+            ghcr.io/pay-skill/pay:${{ env.TAG }}
             ghcr.io/pay-skill/pay:latest
 
       - name: Build and push Docker image (Docker Hub)
@@ -106,7 +116,7 @@ jobs:
           context: .
           push: true
           tags: |
-            payskill/pay:${{ github.ref_name }}
+            payskill/pay:${{ env.TAG }}
             payskill/pay:latest
         continue-on-error: true
 
@@ -115,6 +125,8 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TAG }}
       - uses: dtolnay/rust-toolchain@stable
       - name: Publish to crates.io
         run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -132,6 +144,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
           files: artifacts/**/*
           generate_release_notes: true
 
@@ -146,7 +159,7 @@ jobs:
           token: ${{ secrets.TAP_GITHUB_TOKEN }}
           repository: pay-skill/homebrew-tap
           event-type: release-published
-          client-payload: '{"tag": "${{ github.ref_name }}"}'
+          client-payload: '{"tag": "${{ env.TAG }}"}'
 
   scoop:
     runs-on: ubuntu-latest
@@ -159,4 +172,4 @@ jobs:
           token: ${{ secrets.BUCKET_GITHUB_TOKEN }}
           repository: pay-skill/scoop-bucket
           event-type: release-published
-          client-payload: '{"tag": "${{ github.ref_name }}"}'
+          client-payload: '{"tag": "${{ env.TAG }}"}'
