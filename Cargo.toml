@@ -55,6 +55,17 @@ version = "0.3"
 assert_cmd = "2"
 predicates = "3"
 
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/pay-{ target-family }-{ target-arch }{ binary-ext }"
+pkg-fmt = "bin"
+
+[package.metadata.binstall.overrides]
+x86_64-unknown-linux-gnu = { pkg-url = "{ repo }/releases/download/v{ version }/pay-linux-amd64" }
+aarch64-unknown-linux-gnu = { pkg-url = "{ repo }/releases/download/v{ version }/pay-linux-arm64" }
+x86_64-apple-darwin = { pkg-url = "{ repo }/releases/download/v{ version }/pay-macos-amd64" }
+aarch64-apple-darwin = { pkg-url = "{ repo }/releases/download/v{ version }/pay-macos-arm64" }
+x86_64-pc-windows-msvc = { pkg-url = "{ repo }/releases/download/v{ version }/pay-windows-amd64.exe" }
+
 [profile.release]
 strip = true
 lto = true
