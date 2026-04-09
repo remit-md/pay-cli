@@ -1,0 +1,38 @@
+name: pay
+base: core22
+version: '0.2.2'
+summary: CLI for pay — USDC payment infrastructure for AI agents
+description: |
+  Payment infrastructure for AI agents. Three primitives: direct payments,
+  tabs (pre-funded metered accounts), and x402 HTTP paywalls. Built on USDC
+  and Base. Agents hold USDC, never ETH. Gas is handled by the protocol.
+
+grade: stable
+confinement: strict
+
+architectures:
+  - build-on: amd64
+  - build-on: arm64
+
+parts:
+  pay:
+    plugin: nil
+    override-build: |
+      ARCH=$(dpkg --print-architecture)
+      case "$ARCH" in
+        amd64) ARTIFACT="pay-linux-amd64" ;;
+        arm64) ARTIFACT="pay-linux-arm64" ;;
+        *) echo "Unsupported: $ARCH"; exit 1 ;;
+      esac
+      curl -fsSL "https://github.com/pay-skill/pay-cli/releases/download/v${SNAPCRAFT_PROJECT_VERSION}/${ARTIFACT}" -o pay
+      chmod +x pay
+      install -Dm755 pay "$SNAPCRAFT_PART_INSTALL/bin/pay"
+    build-packages:
+      - curl
+
+apps:
+  pay:
+    command: bin/pay
+    plugs:
+      - network
+      - home

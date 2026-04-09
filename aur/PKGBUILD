@@ -1,0 +1,19 @@
+# Maintainer: pay-skill <hello@pay-skill.com>
+pkgname=pay-bin
+pkgver=0.2.2
+pkgrel=1
+pkgdesc='CLI for pay — USDC payment infrastructure for AI agents'
+arch=('x86_64' 'aarch64')
+url='https://pay-skill.com'
+license=('MIT')
+provides=('pay')
+conflicts=('pay')
+
+source_x86_64=("pay-${pkgver}-x86_64::https://github.com/pay-skill/pay-cli/releases/download/v${pkgver}/pay-linux-amd64")
+source_aarch64=("pay-${pkgver}-aarch64::https://github.com/pay-skill/pay-cli/releases/download/v${pkgver}/pay-linux-arm64")
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
+
+package() {
+    install -Dm755 "pay-${pkgver}-${CARCH}" "${pkgdir}/usr/bin/pay"
+}
