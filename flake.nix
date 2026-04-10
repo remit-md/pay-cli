@@ -12,10 +12,10 @@
         pkgs = nixpkgs.legacyPackages.${system};
         version = "0.2.2";
         platformMap = {
-          "x86_64-linux" = { artifact = "pay-linux-amd64"; sha256 = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; };
-          "aarch64-linux" = { artifact = "pay-linux-arm64"; sha256 = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; };
-          "x86_64-darwin" = { artifact = "pay-macos-amd64"; sha256 = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; };
-          "aarch64-darwin" = { artifact = "pay-macos-arm64"; sha256 = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; };
+          "x86_64-linux" = { artifact = "pay-linux-amd64"; sha256 = "sha256-5/dM6ly3ehmhlcTfMvuCl4jX4ExU43NWJ/z4WHtAIno="; };
+          "aarch64-linux" = { artifact = "pay-linux-arm64"; sha256 = "sha256-9JxVXFj1nTFL5UHk7WQesOpmYHzFwDfS0BugPlPcT0M="; };
+          "x86_64-darwin" = { artifact = "pay-macos-amd64"; sha256 = "sha256-JIaYtz39DUnLc5qE923E6h5cw11kEbcBKFvMIHyy4fU="; };
+          "aarch64-darwin" = { artifact = "pay-macos-arm64"; sha256 = "sha256-aKaCszAOYpOCOaHAbJmt+NaqeBS+JyY8G6UdSSLFnMY="; };
         };
         platform = platformMap.${system} or (throw "Unsupported system: ${system}");
       in {
