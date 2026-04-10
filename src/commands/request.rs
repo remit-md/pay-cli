@@ -125,7 +125,19 @@ pub async fn run(args: RequestArgs, mut ctx: super::Context) -> Result<()> {
         let tab_id = if let Some(t) = tab {
             t["id"].as_str().unwrap_or("").to_string()
         } else {
+            // Pre-flight balance check before auto-opening tab
             let tab_amount = std::cmp::max(amount * 10, 5_000_000);
+            let status: serde_json::Value = ctx.get("/status").await?;
+            let balance_str = status["balance_usdc"].as_str().unwrap_or("0");
+            let balance_micro = (balance_str.parse::<f64>().unwrap_or(0.0) * 1_000_000.0) as u64;
+            if balance_micro < tab_amount {
+                anyhow::bail!(
+                    "insufficient balance: have ${:.2}, need ${:.2} to open tab",
+                    balance_micro as f64 / 1_000_000.0,
+                    tab_amount as f64 / 1_000_000.0,
+                );
+            }
+
             let contracts = crate::permit::get_contracts(&mut ctx).await?;
             let permit =
                 crate::permit::prepare_and_sign(&mut ctx, tab_amount, contracts.active_tab())
