@@ -224,3 +224,107 @@ jobs:
         with:
           snap: ${{ steps.build.outputs.snap }}
           release: stable
+
+  chocolatey:
+    runs-on: windows-latest
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pay-windows-amd64.exe
+          path: .
+
+      - name: Compute version and hash
+        id: meta
+        shell: bash
+        run: |
+          VER="${{ env.TAG }}"
+          VER="${VER#v}"
+          SHA=$(sha256sum pay-windows-amd64.exe | cut -d ' ' -f1)
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate nuspec
+        shell: bash
+        run: |
+          mkdir -p choco/tools
+          VER="${{ steps.meta.outputs.version }}"
+          cat > choco/pay-cli.nuspec << EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <package xmlns="http://schemas.chocolatey.org/2015/06/nuspec.xsd">
+            <metadata>
+              <id>pay-cli</id>
+              <version>${VER}</version>
+              <title>pay</title>
+              <authors>pay-skill</authors>
+              <owners>pay-skill</owners>
+              <projectUrl>https://pay-skill.com</projectUrl>
+              <projectSourceUrl>https://github.com/pay-skill/pay-cli</projectSourceUrl>
+              <bugTrackerUrl>https://github.com/pay-skill/pay-cli/issues</bugTrackerUrl>
+              <licenseUrl>https://github.com/pay-skill/pay-cli/blob/main/LICENSE</licenseUrl>
+              <requireLicenseAcceptance>false</requireLicenseAcceptance>
+              <description>Payment CLI for AI agents - USDC on Base</description>
+              <summary>CLI tool for USDC payments on Base, designed for AI agents</summary>
+              <tags>ai payment usdc blockchain cli</tags>
+              <packageSourceUrl>https://github.com/pay-skill/pay-cli/tree/main/choco</packageSourceUrl>
+            </metadata>
+            <files>
+              <file src="tools\**" target="tools" />
+            </files>
+          </package>
+          EOF
+          # Strip leading whitespace from heredoc
+          sed -i 's/^          //' choco/pay-cli.nuspec
+
+      - name: Generate install script
+        shell: bash
+        run: |
+          VER="${{ steps.meta.outputs.version }}"
+          TAG="${{ env.TAG }}"
+          SHA="${{ steps.meta.outputs.sha256 }}"
+          cat > choco/tools/chocolateyInstall.ps1 << EOF
+          \$ErrorActionPreference = 'Stop'
+
+          \$toolsDir = Split-Path -Parent \$MyInvocation.MyCommand.Definition
+          \$version  = '${VER}'
+          \$url      = "https://github.com/pay-skill/pay-cli/releases/download/${TAG}/pay-windows-amd64.exe"
+          \$checksum = '${SHA}'
+
+          \$packageArgs = @{
+            packageName   = 'pay-cli'
+            fileFullPath  = Join-Path \$toolsDir 'pay.exe'
+            url64bit      = \$url
+            checksum64    = \$checksum
+            checksumType64= 'sha256'
+          }
+
+          Get-ChocolateyWebFile @packageArgs
+          EOF
+          sed -i 's/^          //' choco/tools/chocolateyInstall.ps1
+
+      - name: Generate uninstall script
+        shell: bash
+        run: |
+          cat > choco/tools/chocolateyUninstall.ps1 << 'EOF'
+          $ErrorActionPreference = 'Stop'
+
+          $toolsDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+          $binary   = Join-Path $toolsDir 'pay.exe'
+
+          if (Test-Path $binary) {
+            Remove-Item $binary -Force
+          }
+          EOF
+          sed -i 's/^          //' choco/tools/chocolateyUninstall.ps1
+
+      - name: Pack
+        shell: pwsh
+        run: choco pack choco/pay-cli.nuspec --output-directory choco
+
+      - name: Push to Chocolatey
+        if: env.CHOCO_API_KEY != ''
+        shell: pwsh
+        run: choco push choco/pay-cli.${{ steps.meta.outputs.version }}.nupkg --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCO_API_KEY }}
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}

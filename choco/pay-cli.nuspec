@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.chocolatey.org/2015/06/nuspec.xsd">
+  <metadata>
+    <id>pay-cli</id>
+    <version>0.2.2</version>
+    <title>pay</title>
+    <authors>pay-skill</authors>
+    <owners>pay-skill</owners>
+    <projectUrl>https://pay-skill.com</projectUrl>
+    <projectSourceUrl>https://github.com/pay-skill/pay-cli</projectSourceUrl>
+    <bugTrackerUrl>https://github.com/pay-skill/pay-cli/issues</bugTrackerUrl>
+    <licenseUrl>https://github.com/pay-skill/pay-cli/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Payment CLI for AI agents - USDC on Base</description>
+    <summary>CLI tool for USDC payments on Base, designed for AI agents</summary>
+    <tags>ai payment usdc blockchain cli</tags>
+    <packageSourceUrl>https://github.com/pay-skill/pay-cli/tree/main/choco</packageSourceUrl>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
