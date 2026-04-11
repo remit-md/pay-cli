@@ -176,6 +176,18 @@ jobs:
           event-type: release-published
           client-payload: '{"tag": "${{ env.TAG }}"}'
 
+  winget:
+    runs-on: windows-latest
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    steps:
+      - name: Update WinGet manifest
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: pay-skill.pay
+          installers-regex: 'pay-windows-amd64\.exe$'
+          token: ${{ secrets.WINGET_GITHUB_TOKEN }}
+
   aur:
     runs-on: ubuntu-latest
     needs: release
