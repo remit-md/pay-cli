@@ -153,7 +153,10 @@ pub async fn run(args: UpdateArgs, ctx: super::Context) -> Result<()> {
         }
     }
 
-    eprintln!("Downloading {asset_name} ({:.1} MB)...", asset.size as f64 / 1_048_576.0);
+    eprintln!(
+        "Downloading {asset_name} ({:.1} MB)...",
+        asset.size as f64 / 1_048_576.0
+    );
     let bytes = client
         .get(&asset.browser_download_url)
         .send()

@@ -56,7 +56,12 @@ struct Cli {
     chain_id: Option<u64>,
 
     /// Override router contract address
-    #[arg(long, global = true, env = "PAYSKILL_ROUTER_ADDRESS", hide_short_help = true)]
+    #[arg(
+        long,
+        global = true,
+        env = "PAYSKILL_ROUTER_ADDRESS",
+        hide_short_help = true
+    )]
     router_address: Option<String>,
 
     #[command(subcommand)]
