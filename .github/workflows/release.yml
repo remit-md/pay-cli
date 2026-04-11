@@ -225,6 +225,41 @@ jobs:
           snap: ${{ steps.build.outputs.snap }}
           release: stable
 
+  msi:
+    runs-on: windows-latest
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: pay-windows-amd64.exe
+          path: wix
+
+      - name: Rename binary
+        shell: bash
+        run: mv wix/pay-windows-amd64.exe wix/pay.exe
+
+      - name: Install WiX
+        shell: pwsh
+        run: dotnet tool install --global wix --version 5.*
+
+      - name: Build MSI
+        shell: bash
+        run: |
+          VER="${{ env.TAG }}"
+          VER="${VER#v}"
+          wix build wix/pay.wxs -o pay-windows-amd64.msi -d Version="${VER}" -arch x64
+
+      - name: Upload MSI to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: pay-windows-amd64.msi
+
   chocolatey:
     runs-on: windows-latest
     needs: release
