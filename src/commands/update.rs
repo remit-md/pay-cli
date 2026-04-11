@@ -59,11 +59,12 @@ pub async fn run(args: UpdateArgs, ctx: super::Context) -> Result<()> {
     }
 
     eprintln!("Checking for updates...");
-    let client = reqwest::Client::builder()
-        .user_agent("pay-cli")
-        .build()?;
+    let client = reqwest::Client::builder().user_agent("pay-cli").build()?;
 
-    let resp = client.get(GITHUB_API_URL).send().await
+    let resp = client
+        .get(GITHUB_API_URL)
+        .send()
+        .await
         .context("failed to reach GitHub API")?;
 
     // Handle rate limiting explicitly (60 req/hr unauthenticated)
@@ -102,10 +103,7 @@ pub async fn run(args: UpdateArgs, ctx: super::Context) -> Result<()> {
     let asset_name = platform_asset_name()
         .context("unsupported platform -- download manually from GitHub Releases")?;
 
-    let asset = release
-        .assets
-        .iter()
-        .find(|a| a.name == asset_name);
+    let asset = release.assets.iter().find(|a| a.name == asset_name);
 
     if args.check {
         if ctx.json {
@@ -153,7 +151,10 @@ pub async fn run(args: UpdateArgs, ctx: super::Context) -> Result<()> {
         }
     }
 
-    eprintln!("Downloading {asset_name} ({:.1} MB)...", asset.size as f64 / 1_048_576.0);
+    eprintln!(
+        "Downloading {asset_name} ({:.1} MB)...",
+        asset.size as f64 / 1_048_576.0
+    );
     let bytes = client
         .get(&asset.browser_download_url)
         .send()

@@ -3,10 +3,8 @@ use anyhow::{bail, Result};
 use crate::error;
 
 #[derive(clap::Args)]
-#[command(
-    long_about = "Search the pay service catalog for paid API endpoints. \
-        Filter by category, settlement mode (direct or tab), or sort by volume/price."
-)]
+#[command(long_about = "Search the pay service catalog for paid API endpoints. \
+        Filter by category, settlement mode (direct or tab), or sort by volume/price.")]
 pub struct DiscoverArgs {
     /// Search query (matches keywords and description)
     pub query: Option<String>,

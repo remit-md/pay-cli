@@ -12,11 +12,9 @@ use crate::config::Config;
 use crate::signer::{keyring, keystore, password};
 
 #[derive(Subcommand)]
-#[command(
-    long_about = "Advanced wallet management. Key resolution order: \
+#[command(long_about = "Advanced wallet management. Key resolution order: \
         PAYSKILL_SIGNER_KEY env var > OS keychain (.meta) > encrypted file (.enc). \
-        Use `pay init` for first-time setup."
-)]
+        Use `pay init` for first-time setup.")]
 pub enum SignerAction {
     /// Create a new wallet (supports named wallets and --no-keychain)
     Init(SignerInitArgs),

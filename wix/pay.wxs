@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="pay"
+    Version="$(var.Version)"
+    Manufacturer="pay-skill"
+    UpgradeCode="7e8f9a2b-4c3d-4e5f-8a1b-2c3d4e5f6a7b"
+    Language="1033"
+    InstallerVersion="500"
+    Scope="perMachine">
+
+    <SummaryInformation
+      Description="Payment CLI for AI agents - USDC on Base"
+      Manufacturer="pay-skill" />
+
+    <MajorUpgrade
+      DowngradeErrorMessage="A newer version of pay is already installed." />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Feature Id="Main" Title="pay CLI" Level="1">
+      <ComponentGroupRef Id="PayBinary" />
+      <ComponentGroupRef Id="PayPath" />
+    </Feature>
+
+    <Icon Id="PayIcon" SourceFile="pay.exe" />
+    <Property Id="ARPPRODUCTICON" Value="PayIcon" />
+    <Property Id="ARPHELPLINK" Value="https://pay-skill.com/docs/" />
+    <Property Id="ARPURLINFOABOUT" Value="https://pay-skill.com" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/pay-skill/pay-cli/releases" />
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLDIR" Name="pay" />
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="PayBinary" Directory="INSTALLDIR">
+      <Component Id="PayExe" Guid="a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d">
+        <File Id="PayExeFile" Source="pay.exe" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="PayPath" Directory="INSTALLDIR">
+      <Component Id="PathEntry" Guid="b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e">
+        <Environment
+          Id="PATH"
+          Name="PATH"
+          Value="[INSTALLDIR]"
+          Permanent="no"
+          Part="last"
+          Action="set"
+          System="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
