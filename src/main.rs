@@ -240,8 +240,26 @@ async fn main() -> Result<()> {
         Commands::Withdraw(args) => {
             commands::require_init()?;
             commands::validate_address(&args.to)?;
-            let _amount = commands::parse_amount(&args.amount)?;
-            let resp = ctx.post("/links/withdraw", &serde_json::json!({})).await?;
+            let micro = commands::parse_amount(&args.amount)?;
+
+            // Sign USDC permit granting the relayer transferFrom allowance.
+            let contracts = permit::get_contracts(&mut ctx).await?;
+            let permit_sig = permit::prepare_and_sign(&mut ctx, micro, &contracts.relayer).await?;
+
+            let resp = ctx
+                .post(
+                    "/links/withdraw",
+                    &serde_json::json!({
+                        "permit": {
+                            "value": micro,
+                            "deadline": permit_sig.deadline,
+                            "v": permit_sig.v,
+                            "r": permit_sig.r,
+                            "s": permit_sig.s,
+                        }
+                    }),
+                )
+                .await?;
             let url = resp["url"].as_str().unwrap_or("");
             if ctx.json {
                 error::print_json(&resp);

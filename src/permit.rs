@@ -101,6 +101,7 @@ pub async fn get_contracts(ctx: &mut commands::Context) -> Result<ContractAddres
         tab_v2: resp["tab_v2"].as_str().unwrap_or_default().to_string(),
         direct: resp["direct"].as_str().unwrap_or_default().to_string(),
         usdc: resp["usdc"].as_str().unwrap_or_default().to_string(),
+        relayer: resp["relayer"].as_str().unwrap_or_default().to_string(),
     })
 }
 
@@ -111,6 +112,7 @@ pub struct ContractAddresses {
     pub tab_v2: String,
     pub direct: String,
     pub usdc: String,
+    pub relayer: String,
 }
 
 impl ContractAddresses {
