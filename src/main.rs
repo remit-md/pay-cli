@@ -217,6 +217,9 @@ async fn main() -> Result<()> {
         }
         Commands::Fund(args) => {
             commands::require_init()?;
+            // Ensure relayer is approved (one-time, no gas — just stores permit).
+            permit::ensure_relayer_approved(&mut ctx).await?;
+
             let messages: Vec<serde_json::Value> = args
                 .message
                 .iter()
@@ -225,26 +228,6 @@ async fn main() -> Result<()> {
             let mut body = serde_json::json!({ "messages": messages });
             if let Some(name) = &args.name {
                 body["agent_name"] = serde_json::json!(name);
-            }
-            // Best-effort: sign permit so dashboard withdraw tab works from fund links.
-            if let Ok(contracts) = permit::get_contracts(&mut ctx).await {
-                if !contracts.relayer.is_empty() {
-                    if let Ok(status) = ctx.get("/status").await {
-                        let bal_str = status["balance_usdc"].as_str().unwrap_or("0");
-                        let micro: u64 = bal_str.parse().unwrap_or(0);
-                        if micro > 0 {
-                            if let Ok(p) = permit::prepare_and_sign(&mut ctx, micro, &contracts.relayer).await {
-                                body["permit"] = serde_json::json!({
-                                    "value": micro,
-                                    "deadline": p.deadline,
-                                    "v": p.v,
-                                    "r": p.r,
-                                    "s": p.s,
-                                });
-                            }
-                        }
-                    }
-                }
             }
             let resp = ctx.post("/links/fund", &body).await?;
             let url = resp["url"].as_str().unwrap_or("");
@@ -260,25 +243,12 @@ async fn main() -> Result<()> {
         Commands::Withdraw(args) => {
             commands::require_init()?;
             commands::validate_address(&args.to)?;
-            let micro = commands::parse_amount(&args.amount)?;
-
-            // Sign USDC permit granting the relayer transferFrom allowance.
-            let contracts = permit::get_contracts(&mut ctx).await?;
-            let permit_sig = permit::prepare_and_sign(&mut ctx, micro, &contracts.relayer).await?;
+            let _micro = commands::parse_amount(&args.amount)?;
+            // Ensure relayer is approved (one-time, no gas — just stores permit).
+            permit::ensure_relayer_approved(&mut ctx).await?;
 
             let resp = ctx
-                .post(
-                    "/links/withdraw",
-                    &serde_json::json!({
-                        "permit": {
-                            "value": micro,
-                            "deadline": permit_sig.deadline,
-                            "v": permit_sig.v,
-                            "r": permit_sig.r,
-                            "s": permit_sig.s,
-                        }
-                    }),
-                )
+                .post("/links/withdraw", &serde_json::json!({}))
                 .await?;
             let url = resp["url"].as_str().unwrap_or("");
             if ctx.json {

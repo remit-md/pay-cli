@@ -87,6 +87,36 @@ pub async fn prepare_and_sign(
     })
 }
 
+/// Ensure the PayDirect contract has a stored approval for this wallet.
+/// Signs a max-value permit (off-chain, free) and stores it server-side.
+/// The permit is submitted on-chain only at first withdrawal.
+pub async fn ensure_relayer_approved(ctx: &mut commands::Context) -> Result<()> {
+    let contracts = get_contracts(ctx).await?;
+
+    // Sign permit: spender = PayDirect, value = max u64, deadline = max u64.
+    // Max u64 ≈ $18 trillion USDC — effectively unlimited.
+    // Deadline far in the future — permit stays valid.
+    let max_value: u64 = u64::MAX;
+    let max_deadline: u64 = u64::MAX;
+    let permit = prepare_and_sign(ctx, max_value, &contracts.direct).await?;
+
+    // Store server-side (no gas, just DB).
+    ctx.post(
+        "/relayer-approval",
+        &serde_json::json!({
+            "value": max_value,
+            "deadline": max_deadline,
+            "v": permit.v,
+            "r": permit.r,
+            "s": permit.s,
+        }),
+    )
+    .await
+    .context("failed to store relayer approval")?;
+
+    Ok(())
+}
+
 /// Fetch contract addresses from the server's /contracts endpoint.
 /// Returns (router, tab, direct, usdc) addresses.
 pub async fn get_contracts(ctx: &mut commands::Context) -> Result<ContractAddresses> {
