@@ -2,7 +2,7 @@
 name = "pay-cli"
 version = "0.2.10"
 edition = "2021"
-description = "CLI for pay — payment infrastructure for AI agents"
+description = "CLI for Pay. x402 payment stack for AI agents -- direct payments, metered tabs, HTTP 402 paywalls. USDC on Base."
 authors = ["Agent Payment Protocol Infrastructure Inc."]
 license = "MIT"
 repository = "https://github.com/pay-skill/pay-cli"

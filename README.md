@@ -1,6 +1,6 @@
 # pay
 
-Command-line tool for [pay](https://pay-skill.com) — payment infrastructure for AI agents. USDC on Base.
+Command-line tool for [Pay](https://pay-skill.com) -- the complete x402 payment stack for AI agents. USDC on Base. Designed for programmatic use by AI agents: JSON output by default, mainnet by default.
 
 ## Install
 
@@ -129,3 +129,14 @@ pay withdraw <to> <amount>            Withdraw USDC
 ## License
 
 MIT
+
+## Part of Pay
+
+Pay is the complete x402 payment stack -- gateway, facilitator, SDKs, CLI, and MCP server -- that lets AI agents pay for APIs with USDC on Base.
+
+- [Documentation](https://pay-skill.com/docs/)
+- [Architecture](https://pay-skill.com/docs/architecture)
+- [SDK](https://github.com/pay-skill/pay-sdk) -- Python + TypeScript
+- [pay-gate](https://github.com/pay-skill/gate) -- x402 payment gateway
+- [MCP Server](https://github.com/pay-skill/mcp) -- Claude Desktop / Cursor / VS Code
+- [Protocol](https://github.com/pay-skill/pay-protocol) -- Smart contracts
