@@ -226,6 +226,26 @@ async fn main() -> Result<()> {
             if let Some(name) = &args.name {
                 body["agent_name"] = serde_json::json!(name);
             }
+            // Best-effort: sign permit so dashboard withdraw tab works from fund links.
+            if let Ok(contracts) = permit::get_contracts(&mut ctx).await {
+                if !contracts.relayer.is_empty() {
+                    if let Ok(status) = ctx.get("/status").await {
+                        let bal_str = status["balance_usdc"].as_str().unwrap_or("0");
+                        let micro: u64 = bal_str.parse().unwrap_or(0);
+                        if micro > 0 {
+                            if let Ok(p) = permit::prepare_and_sign(&mut ctx, micro, &contracts.relayer).await {
+                                body["permit"] = serde_json::json!({
+                                    "value": micro,
+                                    "deadline": p.deadline,
+                                    "v": p.v,
+                                    "r": p.r,
+                                    "s": p.s,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
             let resp = ctx.post("/links/fund", &body).await?;
             let url = resp["url"].as_str().unwrap_or("");
             if ctx.json {
