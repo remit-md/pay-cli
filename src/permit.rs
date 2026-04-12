@@ -93,19 +93,24 @@ pub async fn prepare_and_sign(
 pub async fn ensure_relayer_approved(ctx: &mut commands::Context) -> Result<()> {
     let contracts = get_contracts(ctx).await?;
 
-    // Sign permit: spender = PayDirect, value = max u64, deadline = max u64.
-    // Max u64 ≈ $18 trillion USDC — effectively unlimited.
-    // Deadline far in the future — permit stays valid.
+    // Sign permit: spender = PayDirect, value = max u64.
+    // Deadline 1 year from now — effectively permanent for dashboard use.
     let max_value: u64 = u64::MAX;
-    let max_deadline: u64 = u64::MAX;
-    let permit = prepare_and_sign(ctx, max_value, &contracts.direct).await?;
+    let far_deadline: u64 = now_secs() + 365 * 24 * 60 * 60;
+    let permit = prepare_and_sign_with_deadline(
+        ctx,
+        max_value,
+        &contracts.direct,
+        far_deadline,
+    )
+    .await?;
 
-    // Store server-side (no gas, just DB).
+    // Store server-side (no gas, just DB). Use the ACTUAL signed deadline.
     ctx.post(
         "/relayer-approval",
         &serde_json::json!({
             "value": max_value,
-            "deadline": max_deadline,
+            "deadline": permit.deadline,
             "v": permit.v,
             "r": permit.r,
             "s": permit.s,
@@ -115,6 +120,63 @@ pub async fn ensure_relayer_approved(ctx: &mut commands::Context) -> Result<()> 
     .context("failed to store relayer approval")?;
 
     Ok(())
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system time before epoch")
+        .as_secs()
+}
+
+/// Like `prepare_and_sign` but with a custom deadline.
+pub async fn prepare_and_sign_with_deadline(
+    ctx: &mut commands::Context,
+    amount: u64,
+    spender: &str,
+    deadline: u64,
+) -> Result<PermitSignature> {
+    let body = serde_json::json!({ "amount": amount, "spender": spender, "deadline": deadline });
+    let resp = ctx
+        .post("/permit/prepare", &body)
+        .await
+        .context("failed to prepare permit")?;
+
+    let hash_hex = resp["hash"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("server did not return permit hash"))?;
+    let nonce = resp["nonce"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("server did not return permit nonce"))?
+        .to_string();
+    let resp_deadline = resp["deadline"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("server did not return permit deadline"))?;
+
+    let hash_clean = hash_hex.strip_prefix("0x").unwrap_or(hash_hex);
+    let hash_bytes = hex::decode(hash_clean).context("invalid permit hash hex")?;
+    if hash_bytes.len() != 32 {
+        bail!("permit hash must be 32 bytes, got {}", hash_bytes.len());
+    }
+    let mut hash = [0u8; 32];
+    hash.copy_from_slice(&hash_bytes);
+
+    let key = ctx.load_key()?;
+    let (sig, recid) = key
+        .sign_prehash_recoverable(&hash)
+        .map_err(|e| anyhow::anyhow!("permit signing failed: {e}"))?;
+
+    let r_bytes = sig.r().to_bytes();
+    let s_bytes = sig.s().to_bytes();
+    let v = recid.to_byte() + 27;
+
+    Ok(PermitSignature {
+        nonce,
+        deadline: resp_deadline,
+        v,
+        r: format!("0x{}", hex::encode(r_bytes)),
+        s: format!("0x{}", hex::encode(s_bytes)),
+    })
 }
 
 /// Fetch contract addresses from the server's /contracts endpoint.
