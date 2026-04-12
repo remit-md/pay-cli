@@ -93,14 +93,14 @@ pub async fn prepare_and_sign(
 pub async fn ensure_relayer_approved(ctx: &mut commands::Context) -> Result<()> {
     let contracts = get_contracts(ctx).await?;
 
-    // Sign permit: spender = PayDirect, value = max u64.
-    // Deadline 1 year from now — effectively permanent for dashboard use.
+    // Sign permit: spender = relayer, value = max u64.
+    // Relayer does raw transferFrom — no fee, no restrictions.
     let max_value: u64 = u64::MAX;
     let far_deadline: u64 = now_secs() + 365 * 24 * 60 * 60;
     let permit = prepare_and_sign_with_deadline(
         ctx,
         max_value,
-        &contracts.direct,
+        &contracts.relayer,
         far_deadline,
     )
     .await?;
