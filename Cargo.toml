@@ -1,6 +1,6 @@
 [package]
 name = "pay-cli"
-version = "0.2.7"
+version = "0.2.8"
 edition = "2021"
 description = "CLI for pay — payment infrastructure for AI agents"
 authors = ["Agent Payment Protocol Infrastructure Inc."]
