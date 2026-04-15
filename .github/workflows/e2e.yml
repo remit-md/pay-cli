@@ -45,7 +45,7 @@ jobs:
         run: cargo run -- init
 
       - name: Mint testnet USDC
-        run: cargo run -- --json mint 200.00
+        run: cargo run -- mint 200.00
 
       - name: Run all E2E acceptance tests
         run: cargo test --test e2e -- --ignored --test-threads=1
