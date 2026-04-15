@@ -42,56 +42,34 @@ fn verify_windows(reason: &str) -> Result<()> {
     use windows::Win32::System::Console::GetConsoleWindow;
     use windows::Win32::System::WinRT::IUserConsentVerifierInterop;
 
-    // Check if Windows Hello is available.
-    // If the WinRT async call itself fails (e.g. 0x8000000E when the COM
-    // apartment or console context is wrong), fall back to password rather
-    // than hard-failing — the user still has a valid login password.
-    let avail = match UserConsentVerifier::CheckAvailabilityAsync()
+    // Check if Windows Hello is available and usable from this console.
+    // WinRT UI APIs often fail in console contexts (no proper HWND, no
+    // COM STA), so any failure falls through to password prompt.
+    let avail = UserConsentVerifier::CheckAvailabilityAsync()
         .and_then(|op| op.GetResults())
-    {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("Windows Hello unavailable ({e}). Falling back to password prompt.");
-            return verify_windows_password(reason);
-        }
-    };
+        .ok();
 
-    if avail != UserConsentVerifierAvailability::Available {
-        eprintln!("Windows Hello not available. Falling back to password prompt.");
+    if avail != Some(UserConsentVerifierAvailability::Available) {
         return verify_windows_password(reason);
     }
 
-    let interop: IUserConsentVerifierInterop = match factory::<
-        UserConsentVerifier,
-        IUserConsentVerifierInterop,
-    >() {
+    let interop = match factory::<UserConsentVerifier, IUserConsentVerifierInterop>() {
         Ok(i) => i,
-        Err(e) => {
-            eprintln!("Windows Hello interop unavailable ({e}). Falling back to password prompt.");
-            return verify_windows_password(reason);
-        }
+        Err(_) => return verify_windows_password(reason),
     };
 
     let hwnd = unsafe { GetConsoleWindow() };
     let message: windows::core::HSTRING = reason.into();
 
-    let result = match unsafe { interop.RequestVerificationForWindowAsync(hwnd, &message) }
+    let result = unsafe { interop.RequestVerificationForWindowAsync(hwnd, &message) }
         .and_then(|op: windows_future::IAsyncOperation<UserConsentVerificationResult>| {
             op.GetResults()
-        }) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!(
-                "Windows Hello prompt failed ({e}). Falling back to password prompt."
-            );
-            return verify_windows_password(reason);
-        }
-    };
+        });
 
-    if result == UserConsentVerificationResult::Verified {
-        Ok(())
-    } else {
-        bail!("Identity verification denied.");
+    match result {
+        Ok(UserConsentVerificationResult::Verified) => Ok(()),
+        Ok(_) => bail!("Identity verification denied."),
+        Err(_) => verify_windows_password(reason),
     }
 }
 
@@ -100,7 +78,7 @@ fn verify_windows(reason: &str) -> Result<()> {
 fn verify_windows_password(reason: &str) -> Result<()> {
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::Security::{LogonUserW, LOGON32_LOGON_NETWORK, LOGON32_PROVIDER_DEFAULT};
+    use windows::Win32::Security::{LogonUserW, LOGON32_LOGON_INTERACTIVE, LOGON32_PROVIDER_DEFAULT};
 
     eprintln!("Identity verification required: {reason}");
     eprintln!();
@@ -126,7 +104,7 @@ fn verify_windows_password(reason: &str) -> Result<()> {
             PCWSTR(user_wide.as_ptr()),
             PCWSTR(domain_wide.as_ptr()),
             PCWSTR(pass_wide.as_ptr()),
-            LOGON32_LOGON_NETWORK,
+            LOGON32_LOGON_INTERACTIVE,
             LOGON32_PROVIDER_DEFAULT,
             &mut token,
         )
