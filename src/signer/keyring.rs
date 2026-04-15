@@ -199,7 +199,7 @@ pub fn load_key(label: &str) -> Result<Zeroizing<[u8; 32]>> {
     arr.copy_from_slice(&secret);
 
     // K7: Auto-migrate legacy entry to hex format.
-    let hex = format!("0x{}", hex::encode(&*arr));
+    let hex = format!("0x{}", hex::encode(*arr));
     if entry.set_password(&hex).is_ok() {
         eprintln!("pay: migrated keychain entry '{label}' from raw bytes to hex format");
     }
