@@ -155,6 +155,67 @@ fn signer_import_duplicate_fails() {
     cmd.assert().failure();
 }
 
+#[test]
+fn signer_import_key_file() {
+    let (home, _keys, keys_path) = temp_dirs();
+
+    // Write key to a temp file
+    let key_file = home.path().join("key.txt");
+    std::fs::write(&key_file, format!("{ANVIL_KEY}\n")).unwrap();
+
+    let mut cmd = pay_cmd(&keys_path, home.path());
+    cmd.env("PAYSKILL_SIGNER_KEY", TEST_PASSWORD);
+    cmd.args([
+        "signer",
+        "import",
+        "--key-file",
+        key_file.to_str().unwrap(),
+        "--no-keychain",
+    ]);
+    cmd.assert().success();
+
+    // Verify address matches
+    let mut cmd = pay_cmd(&keys_path, home.path());
+    cmd.env("PAYSKILL_SIGNER_KEY", TEST_PASSWORD);
+    cmd.args(["--plain", "address"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains(ANVIL_ADDR));
+}
+
+#[test]
+fn signer_import_stdin() {
+    let (home, _keys, keys_path) = temp_dirs();
+
+    let mut cmd = pay_cmd(&keys_path, home.path());
+    cmd.env("PAYSKILL_SIGNER_KEY", TEST_PASSWORD);
+    cmd.args(["signer", "import", "--no-keychain"]);
+    cmd.write_stdin(format!("{ANVIL_KEY}\n"));
+    cmd.assert().success();
+
+    // Verify address matches
+    let mut cmd = pay_cmd(&keys_path, home.path());
+    cmd.env("PAYSKILL_SIGNER_KEY", TEST_PASSWORD);
+    cmd.args(["--plain", "address"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains(ANVIL_ADDR));
+}
+
+#[test]
+fn signer_import_no_key_source_fails() {
+    let (home, _keys, keys_path) = temp_dirs();
+
+    // No --key, no --key-file, and interactive terminal = should fail
+    // (assert_cmd pipes stdin by default, so this will try stdin and get empty)
+    let mut cmd = pay_cmd(&keys_path, home.path());
+    cmd.env("PAYSKILL_SIGNER_KEY", TEST_PASSWORD);
+    cmd.args(["signer", "import", "--no-keychain"]);
+    // Empty stdin
+    cmd.write_stdin("");
+    cmd.assert().failure();
+}
+
 // -- pay sign (subprocess protocol) -------------------------------------------
 
 #[test]

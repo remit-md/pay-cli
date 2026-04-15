@@ -37,9 +37,14 @@ pub struct SignerInitArgs {
 
 #[derive(Args)]
 pub struct SignerImportArgs {
-    /// Private key as hex (with or without 0x prefix)
+    /// Private key as hex (with or without 0x prefix).
+    /// WARNING: visible in shell history. Prefer --key-file or stdin.
     #[arg(long)]
-    key: String,
+    key: Option<String>,
+
+    /// Read private key from a file (first line, hex)
+    #[arg(long)]
+    key_file: Option<String>,
 
     /// Wallet name (default: "default")
     #[arg(long, default_value = "default")]
@@ -148,6 +153,42 @@ async fn run_init(args: SignerInitArgs) -> Result<()> {
     Ok(())
 }
 
+/// Resolve the private key hex from --key, --key-file, or stdin.
+fn resolve_import_key(args: &SignerImportArgs) -> Result<String> {
+    if let Some(ref k) = args.key {
+        return Ok(k.clone());
+    }
+
+    if let Some(ref path) = args.key_file {
+        let contents = std::fs::read_to_string(path)
+            .map_err(|e| anyhow::anyhow!("failed to read key file '{}': {e}", path))?;
+        let line = contents.lines().next().unwrap_or("").trim().to_string();
+        if line.is_empty() {
+            bail!("key file '{}' is empty", path);
+        }
+        return Ok(line);
+    }
+
+    // Try stdin (only if piped, not interactive)
+    if !std::io::stdin().is_terminal() {
+        let mut buf = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)
+            .map_err(|e| anyhow::anyhow!("failed to read key from stdin: {e}"))?;
+        let line = buf.lines().next().unwrap_or("").trim().to_string();
+        if line.is_empty() {
+            bail!("no key provided on stdin");
+        }
+        return Ok(line);
+    }
+
+    bail!(
+        "no private key provided. Use one of:\n  \
+         --key-file <path>     read from a file (recommended)\n  \
+         echo <key> | pay signer import   pipe via stdin\n  \
+         --key <hex>           pass directly (visible in shell history)"
+    );
+}
+
 fn run_import(args: SignerImportArgs) -> Result<()> {
     if wallet_exists(&args.name)? {
         bail!(
@@ -156,8 +197,11 @@ fn run_import(args: SignerImportArgs) -> Result<()> {
         );
     }
 
+    // Resolve key from --key, --key-file, or stdin
+    let key_hex = resolve_import_key(&args)?;
+
     // Parse and validate key
-    let hex_clean = args.key.trim_start_matches("0x");
+    let hex_clean = key_hex.trim_start_matches("0x");
     let raw_bytes = hex::decode(hex_clean).map_err(|_| anyhow::anyhow!("key is not valid hex"))?;
     if raw_bytes.len() != 32 {
         bail!("private key must be exactly 32 bytes (64 hex chars)");
@@ -188,7 +232,7 @@ fn run_import(args: SignerImportArgs) -> Result<()> {
     } else {
         let pw = password::acquire_for_encrypt()?;
         let ks = keystore::Keystore::open()?;
-        ks.import(&args.name, &args.key, &pw)?;
+        ks.import(&args.name, &key_hex, &pw)?;
 
         eprintln!("Imported wallet '{}': {address}", args.name);
         eprintln!("Key stored as encrypted file.");
