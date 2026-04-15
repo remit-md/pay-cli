@@ -135,13 +135,23 @@ fn tab_open_rejects_below_minimum() {
 #[test]
 #[ignore = "requires PAYSKILL_TESTNET_KEY"]
 fn unsigned_request_rejected() {
-    // Send a request WITHOUT a valid signer — should fail.
+    // Send a request with NO signer available — should fail at resolve_key()
+    // before any network I/O. Removing PAYSKILL_SIGNER_KEY alone is not
+    // enough: the e2e.yml workflow runs `cargo run -- init` before the test
+    // suite which stores a key in the default PAY_KEYS_DIR / keychain, and
+    // resolve_key() would fall back to that stored key. Point PAY_KEYS_DIR
+    // and HOME at empty temp dirs so no fallback exists.
+    let temp_home = tempfile::TempDir::new().expect("tempdir");
+    let temp_keys = tempfile::TempDir::new().expect("tempdir");
+
     let mut cmd = Command::cargo_bin("pay").expect("binary not found");
+    cmd.env_remove("PAYSKILL_SIGNER_KEY");
+    cmd.env("PAY_KEYS_DIR", temp_keys.path().to_str().unwrap());
+    cmd.env("HOME", temp_home.path().to_str().unwrap());
+    cmd.env("USERPROFILE", temp_home.path().to_str().unwrap());
     cmd.arg("--api-url").arg(testnet_url());
     cmd.arg("--chain-id").arg(TESTNET_CHAIN_ID);
     cmd.arg("--router-address").arg(TESTNET_ROUTER);
-    // Deliberately remove PAYSKILL_SIGNER_KEY — no key means no auth.
-    cmd.env_remove("PAYSKILL_SIGNER_KEY");
     cmd.args(["status"]);
     cmd.assert().failure();
 }
@@ -390,45 +400,71 @@ fn withdraw_returns_link() {
 fn x402_request_handles_402_and_pays() {
     // Start a mini HTTP server returning 402 with V2 PAYMENT-REQUIRED header
     // on first request, then 200 when PAYMENT-SIGNATURE header is present.
+    //
+    // The listener is put in non-blocking mode and the accept loop has a
+    // hard deadline. This matters because `handle.join()` below would
+    // otherwise hang forever if `pay request` makes fewer than the expected
+    // two connections — e.g. if it bails out while parsing the 402 body.
+    // Previously that leaked a thread stuck in blocking accept() and froze
+    // the cargo test runner for the full CI timeout (25 minutes).
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind failed");
+    listener
+        .set_nonblocking(true)
+        .expect("set_nonblocking failed");
     let port = listener.local_addr().unwrap().port();
 
     let handle = std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        use std::time::{Duration, Instant};
+        // Matches the `pay request` timeout below so the server stays alive
+        // for the worst-case length of a single subprocess invocation.
+        let deadline = Instant::now() + Duration::from_secs(120);
         // Accept up to 2 connections (first = 402, second = 200)
         for _ in 0..2 {
-            if let Ok((mut stream, _)) = listener.accept() {
-                use std::io::{Read, Write};
-                let mut buf = [0u8; 4096];
-                let n = stream.read(&mut buf).unwrap_or(0);
-                let req = String::from_utf8_lossy(&buf[..n]);
-
-                if req.contains("PAYMENT-SIGNATURE") || req.contains("payment-signature") {
-                    let body = r#"{"content":"paid"}"#;
-                    let resp = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                        body.len(),
-                        body
-                    );
-                    let _ = stream.write_all(resp.as_bytes());
-                } else {
-                    // V2: requirements in body AND base64-encoded in PAYMENT-REQUIRED header
-                    let requirements = format!(
-                        r#"{{"scheme":"exact","amount":1000000,"to":"{}","settlement":"direct","facilitator":"https://testnet.pay-skill.com/x402","maxChargePerCall":1000000,"network":"eip155:84532"}}"#,
-                        provider_addr()
-                    );
-                    use base64::Engine;
-                    let req_b64 = base64::engine::general_purpose::STANDARD.encode(&requirements);
-                    let body = format!(
-                        r#"{{"error":"payment_required","message":"This resource requires payment","requirements":{requirements}}}"#,
-                    );
-                    let resp = format!(
-                        "HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: {}\r\npayment-required: {}\r\nConnection: close\r\n\r\n{}",
-                        body.len(),
-                        req_b64,
-                        body
-                    );
-                    let _ = stream.write_all(resp.as_bytes());
+            let (mut stream, _) = loop {
+                if Instant::now() >= deadline {
+                    return;
                 }
+                match listener.accept() {
+                    Ok(pair) => break pair,
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(25));
+                    }
+                    Err(_) => return,
+                }
+            };
+            // Reset to blocking so read()/write() below don't return WouldBlock.
+            let _ = stream.set_nonblocking(false);
+            let mut buf = [0u8; 4096];
+            let n = stream.read(&mut buf).unwrap_or(0);
+            let req = String::from_utf8_lossy(&buf[..n]);
+
+            if req.contains("PAYMENT-SIGNATURE") || req.contains("payment-signature") {
+                let body = r#"{"content":"paid"}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            } else {
+                // V2: requirements in body AND base64-encoded in PAYMENT-REQUIRED header
+                let requirements = format!(
+                    r#"{{"scheme":"exact","amount":1000000,"to":"{}","settlement":"direct","facilitator":"https://testnet.pay-skill.com/x402","maxChargePerCall":1000000,"network":"eip155:84532"}}"#,
+                    provider_addr()
+                );
+                use base64::Engine;
+                let req_b64 = base64::engine::general_purpose::STANDARD.encode(&requirements);
+                let body = format!(
+                    r#"{{"error":"payment_required","message":"This resource requires payment","requirements":{requirements}}}"#,
+                );
+                let resp = format!(
+                    "HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: {}\r\npayment-required: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    req_b64,
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes());
             }
         }
     });
@@ -440,7 +476,8 @@ fn x402_request_handles_402_and_pays() {
         .output()
         .expect("failed to run pay request");
 
-    // Wait for server thread to finish
+    // Wait for server thread to finish. Bounded by the deadline inside the
+    // thread, so this can't hang even if `pay request` failed early.
     let _ = handle.join();
 
     // The command should succeed (or at least produce output indicating payment was made)
@@ -459,8 +496,10 @@ fn x402_request_handles_402_and_pays() {
 #[test]
 #[ignore = "requires PAYSKILL_TESTNET_KEY"]
 fn address_returns_valid_format() {
+    // `--plain` forces raw `0x...` output; the default is JSON
+    // (`{"address":"0x..."}`) which this assertion would reject.
     let output = pay()
-        .args(["address"])
+        .args(["--plain", "address"])
         .output()
         .expect("failed to run pay address");
     assert!(output.status.success());
