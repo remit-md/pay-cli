@@ -16,7 +16,6 @@ permissions:
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -67,7 +66,7 @@ jobs:
         shell: bash
         run: cp target/${{ matrix.target }}/release/${{ matrix.binary }} ${{ matrix.artifact }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
@@ -78,7 +77,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: pay-linux-amd64
           path: .
@@ -87,14 +86,14 @@ jobs:
         run: chmod +x pay-linux-amd64
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push to GHCR
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -104,7 +103,7 @@ jobs:
 
       - name: Log in to Docker Hub
         if: env.DOCKER_TOKEN != ''
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: payskillhq
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -113,7 +112,7 @@ jobs:
 
       - name: Push to Docker Hub
         if: env.DOCKER_TOKEN != ''
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -140,29 +139,29 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build, docker]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: pay-linux-amd64
           path: artifacts/pay-linux-amd64
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: pay-linux-arm64
           path: artifacts/pay-linux-arm64
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: pay-macos-amd64
           path: artifacts/pay-macos-amd64
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: pay-macos-arm64
           path: artifacts/pay-macos-arm64
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: pay-windows-amd64.exe
           path: artifacts/pay-windows-amd64.exe
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.TAG }}
           files: artifacts/**/*
@@ -174,7 +173,7 @@ jobs:
     if: ${{ !contains(github.ref_name, '-') }}
     steps:
       - name: Update Homebrew formula
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.TAP_GITHUB_TOKEN }}
           repository: pay-skill/homebrew-tap
@@ -187,209 +186,10 @@ jobs:
     if: ${{ !contains(github.ref_name, '-') }}
     steps:
       - name: Update Scoop manifest
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.BUCKET_GITHUB_TOKEN }}
           repository: pay-skill/scoop-bucket
           event-type: release-published
           client-payload: '{"tag": "${{ env.TAG }}"}'
 
-  winget:
-    runs-on: windows-latest
-    needs: release
-    if: ${{ !contains(github.ref_name, '-') }}
-    steps:
-      - name: Update WinGet manifest
-        uses: vedantmgoyal9/winget-releaser@v2
-        with:
-          identifier: pay-skill.pay
-          installers-regex: 'pay-windows-amd64\.exe$'
-          token: ${{ secrets.WINGET_GITHUB_TOKEN }}
-
-  aur:
-    runs-on: ubuntu-latest
-    needs: release
-    if: ${{ !contains(github.ref_name, '-') }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ env.TAG }}
-
-      - name: Update PKGBUILD version
-        run: |
-          VER="${{ env.TAG }}"
-          VER="${VER#v}"
-          sed -i "s/^pkgver=.*/pkgver=${VER}/" aur/PKGBUILD
-
-      - name: Publish to AUR
-        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
-        with:
-          pkgname: pay-bin
-          pkgbuild: aur/PKGBUILD
-          commit_username: pay-skill
-          commit_email: hello@pay-skill.com
-          ssh_private_key: ${{ secrets.AUR_SSH_KEY }}
-
-  snap:
-    runs-on: ubuntu-latest
-    needs: release
-    if: ${{ !contains(github.ref_name, '-') }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ env.TAG }}
-
-      - name: Update snap version
-        run: |
-          VER="${{ env.TAG }}"
-          VER="${VER#v}"
-          sed -i "s/^version: .*/version: '${VER}'/" snap/snapcraft.yaml
-
-      - uses: snapcore/action-build@v1
-        id: build
-
-      - uses: snapcore/action-publish@v1
-        env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-        with:
-          snap: ${{ steps.build.outputs.snap }}
-          release: stable
-
-  msi:
-    runs-on: windows-latest
-    needs: release
-    if: ${{ !contains(github.ref_name, '-') }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ env.TAG }}
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: pay-windows-amd64.exe
-          path: wix
-
-      - name: Rename binary
-        shell: bash
-        run: mv wix/pay-windows-amd64.exe wix/pay.exe
-
-      - name: Install WiX
-        shell: pwsh
-        run: dotnet tool install --global wix --version 5.*
-
-      - name: Build MSI
-        shell: bash
-        run: |
-          VER="${{ env.TAG }}"
-          VER="${VER#v}"
-          wix build wix/pay.wxs -o pay-windows-amd64.msi -d Version="${VER}" -arch x64
-
-      - name: Upload MSI to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG }}
-          files: pay-windows-amd64.msi
-
-  chocolatey:
-    runs-on: windows-latest
-    needs: release
-    if: ${{ !contains(github.ref_name, '-') }}
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: pay-windows-amd64.exe
-          path: .
-
-      - name: Compute version and hash
-        id: meta
-        shell: bash
-        run: |
-          VER="${{ env.TAG }}"
-          VER="${VER#v}"
-          SHA=$(sha256sum pay-windows-amd64.exe | cut -d ' ' -f1)
-          echo "version=${VER}" >> "$GITHUB_OUTPUT"
-          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
-
-      - name: Generate nuspec
-        shell: bash
-        run: |
-          mkdir -p choco/tools
-          VER="${{ steps.meta.outputs.version }}"
-          cat > choco/pay-cli.nuspec << EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <package xmlns="http://schemas.chocolatey.org/2015/06/nuspec.xsd">
-            <metadata>
-              <id>pay-cli</id>
-              <version>${VER}</version>
-              <title>pay</title>
-              <authors>pay-skill</authors>
-              <owners>pay-skill</owners>
-              <projectUrl>https://pay-skill.com</projectUrl>
-              <projectSourceUrl>https://github.com/pay-skill/pay-cli</projectSourceUrl>
-              <bugTrackerUrl>https://github.com/pay-skill/pay-cli/issues</bugTrackerUrl>
-              <licenseUrl>https://github.com/pay-skill/pay-cli/blob/main/LICENSE</licenseUrl>
-              <requireLicenseAcceptance>false</requireLicenseAcceptance>
-              <description>Payment CLI for AI agents - USDC on Base</description>
-              <summary>CLI tool for USDC payments on Base, designed for AI agents</summary>
-              <tags>ai payment usdc blockchain cli</tags>
-              <packageSourceUrl>https://github.com/pay-skill/pay-cli/tree/main/choco</packageSourceUrl>
-            </metadata>
-            <files>
-              <file src="tools\**" target="tools" />
-            </files>
-          </package>
-          EOF
-          # Strip leading whitespace from heredoc
-          sed -i 's/^          //' choco/pay-cli.nuspec
-
-      - name: Generate install script
-        shell: bash
-        run: |
-          VER="${{ steps.meta.outputs.version }}"
-          TAG="${{ env.TAG }}"
-          SHA="${{ steps.meta.outputs.sha256 }}"
-          cat > choco/tools/chocolateyInstall.ps1 << EOF
-          \$ErrorActionPreference = 'Stop'
-
-          \$toolsDir = Split-Path -Parent \$MyInvocation.MyCommand.Definition
-          \$version  = '${VER}'
-          \$url      = "https://github.com/pay-skill/pay-cli/releases/download/${TAG}/pay-windows-amd64.exe"
-          \$checksum = '${SHA}'
-
-          \$packageArgs = @{
-            packageName   = 'pay-cli'
-            fileFullPath  = Join-Path \$toolsDir 'pay.exe'
-            url64bit      = \$url
-            checksum64    = \$checksum
-            checksumType64= 'sha256'
-          }
-
-          Get-ChocolateyWebFile @packageArgs
-          EOF
-          sed -i 's/^          //' choco/tools/chocolateyInstall.ps1
-
-      - name: Generate uninstall script
-        shell: bash
-        run: |
-          cat > choco/tools/chocolateyUninstall.ps1 << 'EOF'
-          $ErrorActionPreference = 'Stop'
-
-          $toolsDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-          $binary   = Join-Path $toolsDir 'pay.exe'
-
-          if (Test-Path $binary) {
-            Remove-Item $binary -Force
-          }
-          EOF
-          sed -i 's/^          //' choco/tools/chocolateyUninstall.ps1
-
-      - name: Pack
-        shell: pwsh
-        run: choco pack choco/pay-cli.nuspec --output-directory choco
-
-      - name: Push to Chocolatey
-        if: env.CHOCO_API_KEY != ''
-        shell: pwsh
-        run: choco push choco/pay-cli.${{ steps.meta.outputs.version }}.nupkg --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCO_API_KEY }}
-        env:
-          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}

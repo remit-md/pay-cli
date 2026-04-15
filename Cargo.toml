@@ -1,6 +1,6 @@
 [package]
 name = "pay-cli"
-version = "0.2.11"
+version = "0.2.12"
 edition = "2021"
 description = "CLI for Pay. x402 payment stack for AI agents -- direct payments, metered tabs, HTTP 402 paywalls. USDC on Base."
 authors = ["Agent Payment Protocol Infrastructure Inc."]

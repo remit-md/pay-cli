@@ -139,13 +139,13 @@ pub async fn run(args: UpdateArgs, ctx: super::Context) -> Result<()> {
     // Confirmation: skip if -y, or if not a TTY (agent/pipe)
     if !args.yes && error::is_terminal() {
         use std::io::Write;
-        eprint!("Download and install v{latest}? [y/N] ");
+        eprint!("Download and install v{latest}? [Y/n] ");
         std::io::stderr().flush().ok();
         let mut input = String::new();
         std::io::stdin()
             .read_line(&mut input)
             .context("failed to read input")?;
-        if !matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
+        if matches!(input.trim().to_lowercase().as_str(), "n" | "no") {
             eprintln!("Cancelled.");
             return Ok(());
         }
