@@ -354,10 +354,7 @@ fn tab_charge_by_provider() {
     );
 
     // 4. Agent closes the tab
-    pay()
-        .args(["tab", "close", tab_id])
-        .assert()
-        .success();
+    pay().args(["tab", "close", tab_id]).assert().success();
 }
 
 // ── Webhooks ────────────────────────────────────────────────────────
