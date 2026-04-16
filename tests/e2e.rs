@@ -1161,7 +1161,7 @@ fn request_at_file_body() {
 #[ignore = "requires PAYSKILL_TESTNET_KEY"]
 fn discover_returns_json_array() {
     pay()
-        .args(["--json", "discover"])
+        .args(["discover"])
         .assert()
         .success()
         .stdout(predicate::str::contains("services"));
@@ -1171,7 +1171,7 @@ fn discover_returns_json_array() {
 #[ignore = "requires PAYSKILL_TESTNET_KEY"]
 fn discover_with_query_returns_json() {
     pay()
-        .args(["--json", "discover", "weather"])
+        .args(["discover", "weather"])
         .assert()
         .success()
         .stdout(predicate::str::contains("services"));
@@ -1181,7 +1181,7 @@ fn discover_with_query_returns_json() {
 #[ignore = "requires PAYSKILL_TESTNET_KEY"]
 fn discover_sort_name_works() {
     pay()
-        .args(["--json", "discover", "--sort", "name"])
+        .args(["discover", "--sort", "name"])
         .assert()
         .success()
         .stdout(predicate::str::contains("services"));
@@ -1191,7 +1191,7 @@ fn discover_sort_name_works() {
 #[ignore = "requires PAYSKILL_TESTNET_KEY"]
 fn discover_nonexistent_returns_empty() {
     pay()
-        .args(["--json", "discover", "xyzzy_nonexistent_99"])
+        .args(["discover", "xyzzy_nonexistent_99"])
         .assert()
         .success()
         .stdout(predicate::str::contains("services"));
