@@ -1108,3 +1108,28 @@ fn discover_nonexistent_returns_empty() {
         .success()
         .stdout(predicate::str::contains("services"));
 }
+
+// ── Network / --testnet flag ───────────────────────────────────────
+
+#[test]
+fn testnet_flag_sets_chain_84532() {
+    ensure_local_init();
+    let mut cmd = Command::cargo_bin("pay").expect("binary not found");
+    cmd.env("PAYSKILL_SIGNER_KEY", LOCAL_KEY);
+    cmd.args(["--testnet", "network"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("84532"))
+        .stdout(predicate::str::contains("testnet"));
+}
+
+#[test]
+fn mainnet_default_sets_chain_8453() {
+    ensure_local_init();
+    let mut cmd = Command::cargo_bin("pay").expect("binary not found");
+    cmd.env("PAYSKILL_SIGNER_KEY", LOCAL_KEY);
+    cmd.args(["network"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("8453"));
+}
