@@ -51,6 +51,43 @@ fn provider_addr() -> String {
         .unwrap_or_else(|| format!("0x{}", "b2".repeat(20)))
 }
 
+static PROVIDER_INIT: Once = Once::new();
+
+/// Ensure `pay init` has been run for the provider wallet.
+fn ensure_provider_init() {
+    PROVIDER_INIT.call_once(|| {
+        if let Ok(key) = env::var("PAYSKILL_TESTNET_PROVIDER_KEY") {
+            let mut cmd = Command::cargo_bin("pay").expect("binary not found");
+            cmd.env("PAYSKILL_SIGNER_KEY", &key);
+            cmd.arg("init").assert().success();
+        }
+    });
+}
+
+/// Build a `pay` command authenticated as the provider (requires PAYSKILL_TESTNET_PROVIDER_KEY).
+fn pay_provider() -> Command {
+    ensure_provider_init();
+    let mut cmd = Command::cargo_bin("pay").expect("binary not found");
+    cmd.arg("--api-url").arg(testnet_url());
+    cmd.arg("--chain-id").arg(TESTNET_CHAIN_ID);
+    cmd.arg("--router-address").arg(TESTNET_ROUTER);
+
+    if let Ok(key) = env::var("PAYSKILL_TESTNET_PROVIDER_KEY") {
+        cmd.env("PAYSKILL_SIGNER_KEY", &key);
+    }
+
+    cmd
+}
+
+/// Get the provider's address from the provider key.
+fn provider_addr_from_key() -> String {
+    let output = pay_provider()
+        .args(["--plain", "address"])
+        .output()
+        .expect("failed to get provider address");
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
 /// Build a `pay` command pre-configured for testnet (requires PAYSKILL_TESTNET_KEY).
 fn pay() -> Command {
     ensure_init();
@@ -254,12 +291,8 @@ fn tab_lifecycle() {
         String::from_utf8_lossy(&topup_output.stderr)
     );
 
-    // TODO: Add a charge step here (open -> list -> topup -> charge -> close).
-    // Charging requires the provider's private key (PAYSKILL_TESTNET_PROVIDER_KEY),
-    // which is a separate wallet from the agent's PAYSKILL_TESTNET_KEY. The test
-    // infrastructure currently only provisions a single keypair. To test charge,
-    // add a second env var for the provider key and build a pay_provider() helper
-    // that constructs a Command authenticated as the provider.
+    // Charge is tested separately in tab_charge_by_provider() (requires
+    // PAYSKILL_TESTNET_PROVIDER_KEY — a second wallet secret).
 
     // 4. Close tab
     pay()
@@ -267,6 +300,64 @@ fn tab_lifecycle() {
         .assert()
         .success()
         .stdout(predicate::str::contains("total_charged").or(predicate::str::contains("closed")));
+}
+
+// ── Tab Charge (provider side) ──────────────────────────────────────
+
+#[test]
+#[ignore = "requires PAYSKILL_TESTNET_KEY + PAYSKILL_TESTNET_PROVIDER_KEY"]
+fn tab_charge_by_provider() {
+    if env::var("PAYSKILL_TESTNET_PROVIDER_KEY").is_err() {
+        eprintln!("skipping: PAYSKILL_TESTNET_PROVIDER_KEY not set");
+        return;
+    }
+
+    // 1. Get provider address from the provider key
+    let provider = provider_addr_from_key();
+    assert!(
+        provider.starts_with("0x") && provider.len() == 42,
+        "provider address invalid: {provider}"
+    );
+
+    // 2. Agent opens a tab with the provider
+    let open_output = pay()
+        .args(["tab", "open", &provider, "10.00", "--max-charge", "1.00"])
+        .output()
+        .expect("failed to run tab open");
+    assert!(
+        open_output.status.success(),
+        "tab open failed: {}",
+        String::from_utf8_lossy(&open_output.stderr)
+    );
+    let open_json: serde_json::Value =
+        serde_json::from_slice(&open_output.stdout).expect("invalid JSON from tab open");
+    let tab_id = open_json["tab_id"].as_str().expect("no tab_id in response");
+    assert!(!tab_id.is_empty());
+
+    // Wait for on-chain state propagation
+    std::thread::sleep(std::time::Duration::from_secs(5));
+
+    // 3. Provider charges the tab ($0.25)
+    let charge_output = pay_provider()
+        .args(["tab", "charge", tab_id, "0.25"])
+        .output()
+        .expect("failed to run tab charge");
+    assert!(
+        charge_output.status.success(),
+        "tab charge failed: {}",
+        String::from_utf8_lossy(&charge_output.stderr)
+    );
+    let charge_stdout = String::from_utf8_lossy(&charge_output.stdout);
+    assert!(
+        charge_stdout.contains("status") || charge_stdout.contains("charge"),
+        "charge output should contain status or charge: {charge_stdout}"
+    );
+
+    // 4. Agent closes the tab
+    pay()
+        .args(["tab", "close", tab_id])
+        .assert()
+        .success();
 }
 
 // ── Webhooks ────────────────────────────────────────────────────────

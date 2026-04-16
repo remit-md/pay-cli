@@ -22,6 +22,7 @@ env:
   PAYSKILL_CHAIN_ID: "84532"
   PAYSKILL_ROUTER_ADDRESS: "0xE0Aa45e6937F3b9Fc0BEe457361885Cb9bfC067F"
   PAYSKILL_TESTNET_PROVIDER: ${{ github.event.inputs.provider_address }}
+  PAYSKILL_TESTNET_PROVIDER_KEY: ${{ secrets.PAYSKILL_TESTNET_PROVIDER_KEY }}
 
 permissions:
   contents: read
